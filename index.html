@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Dispro is a verifiable distributed compute marketplace for small and large processing jobs."
+    />
+    <title>Dispro - Verifiable Distributed Compute</title>
+    <link rel="icon" href="public/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="public/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Dispro home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Dispro</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#platform">Platform</a>
+        <a href="#api">API</a>
+        <a href="#network">Network</a>
+        <a class="nav-action" href="health">Status</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="mesh-visual" aria-hidden="true">
+          <div class="mesh-line mesh-line-a"></div>
+          <div class="mesh-line mesh-line-b"></div>
+          <div class="mesh-line mesh-line-c"></div>
+          <div class="mesh-line mesh-line-d"></div>
+          <div class="mesh-node mesh-node-mobile">
+            <span>Mobile</span>
+            <strong>verify</strong>
+          </div>
+          <div class="mesh-node mesh-node-laptop">
+            <span>Laptop</span>
+            <strong>batch</strong>
+          </div>
+          <div class="mesh-node mesh-node-gpu">
+            <span>GPU</span>
+            <strong>heavy</strong>
+          </div>
+          <div class="mesh-node mesh-node-server">
+            <span>Server</span>
+            <strong>trusted</strong>
+          </div>
+          <div class="task-stream task-stream-one"></div>
+          <div class="task-stream task-stream-two"></div>
+        </div>
+
+        <div class="hero-copy">
+          <p class="eyebrow">Official Dispro Platform</p>
+          <h1>Dispro</h1>
+          <p class="hero-lede">
+            Send files, URLs, code, or proof artifacts. Dispro splits the work, assigns it to a distributed network,
+            verifies the result, and records audit evidence.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#api">View API</a>
+            <a class="button button-secondary" href="#platform">How it works</a>
+          </div>
+        </div>
+
+        <div class="status-strip" role="status" aria-live="polite">
+          <span>API</span>
+          <strong id="api-status">checking</strong>
+          <span>Nodes</span>
+          <strong id="node-count">-</strong>
+          <span>Phase</span>
+          <strong>2</strong>
+        </div>
+      </section>
+
+      <section id="platform" class="section section-grid">
+        <div class="section-heading">
+          <p class="eyebrow">Platform</p>
+          <h2>From order to result, every job becomes a verifiable task plan.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-index">01</span>
+            <h3>Order</h3>
+            <p>Dispro accepts files, folders, URLs, code, and proof artifacts, then estimates cost from size and workload profile.</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-index">02</span>
+            <h3>Split</h3>
+            <p>Any workload can be split into compute, verification, and canary tasks for reliable distributed execution.</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-index">03</span>
+            <h3>Verify</h3>
+            <p>Random checks, known-answer canaries, and signed audit events keep results traceable without recomputing every task.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="api" class="section api-section">
+        <div class="section-heading">
+          <p class="eyebrow">API</p>
+          <h2>Order processing from apps, CLIs, build systems, and external services.</h2>
+        </div>
+        <div class="api-layout">
+          <pre class="code-panel"><code>POST /orders
+{
+  "customerId": "customer_001",
+  "workload": "custom.thumbnail.extract",
+  "source": {
+    "kind": "url",
+    "uri": "https://example.com/input.bin",
+    "byteSize": 5500000,
+    "contentHash": "d6f8d5c842ec2c59..."
+  },
+  "verificationLevel": "standard",
+  "requirements": {
+    "maxChunkBytes": 2000000,
+    "workloadProfile": {
+      "unitBytes": 1000000,
+      "estimatedMemoryGb": 1
+    }
+  }
+}</code></pre>
+          <div class="api-points">
+            <p>The API creates an order plan immediately and persists tasks, assignments, and audit events.</p>
+            <ul>
+              <li><code>GET /orders/:id/tasks</code> returns worker-ready tasks.</li>
+              <li><code>GET /orders/:id/audit</code> verifies the audit hash chain.</li>
+              <li><code>POST /nodes/register</code> registers generic or specialized nodes.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="network" class="section network-section">
+        <div class="section-heading">
+          <p class="eyebrow">Network</p>
+          <h2>Phones verify, PCs compute, and trusted servers handle high-value work.</h2>
+        </div>
+        <div class="lane-grid">
+          <article class="lane">
+            <h3>Light verification</h3>
+            <p>Signatures, hashes, random checks, and canary tasks are routed to low-load verification nodes.</p>
+          </article>
+          <article class="lane">
+            <h3>General compute</h3>
+            <p>Image conversion, PDF compression, data transforms, code tests, and custom workloads are assigned by score.</p>
+          </article>
+          <article class="lane">
+            <h3>Trusted execution</h3>
+            <p>Enterprise, urgent, long-running, and GPU-heavy jobs can be restricted to high-trust node pools.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>Dispro</span>
+      <span>Verifiable distributed compute marketplace.</span>
+    </footer>
+
+    <script src="public/app.js" type="module"></script>
+  </body>
+</html>
