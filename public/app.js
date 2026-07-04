@@ -3,7 +3,7 @@ async function refreshStatus() {
   const nodeCount = document.querySelector("#node-count");
 
   try {
-    const [healthResponse, nodesResponse] = await Promise.all([fetch("/health"), fetch("/nodes")]);
+    const [healthResponse, nodesResponse] = await Promise.all([fetch("health"), fetch("nodes")]);
     const health = await healthResponse.json();
     const nodes = await nodesResponse.json();
 

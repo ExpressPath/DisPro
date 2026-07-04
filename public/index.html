@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,12 +8,12 @@
       content="Dispro is a verifiable distributed compute marketplace for small and large processing jobs."
     />
     <title>Dispro - Verifiable Distributed Compute</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="/" aria-label="Dispro home">
+      <a class="brand" href="./" aria-label="Dispro home">
         <span class="brand-mark" aria-hidden="true"></span>
         <span>Dispro</span>
       </a>
@@ -21,7 +21,7 @@
         <a href="#platform">Platform</a>
         <a href="#api">API</a>
         <a href="#network">Network</a>
-        <a class="nav-action" href="/health">Status</a>
+        <a class="nav-action" href="health">Status</a>
       </nav>
     </header>
 
@@ -56,11 +56,12 @@
           <p class="eyebrow">Official Dispro Platform</p>
           <h1>Dispro</h1>
           <p class="hero-lede">
-            世界中の余剰計算力へ、ファイル・URL・コードを送るだけ。小さな処理も、大きな処理も、分割・検証・署名ログ付きで実行する分散コンピュート市場です。
+            Send files, URLs, code, or proof artifacts. Dispro splits the work, assigns it to a distributed network,
+            verifies the result, and records audit evidence.
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="#api">APIを見る</a>
-            <a class="button button-secondary" href="#platform">仕組みを見る</a>
+            <a class="button button-primary" href="#api">View API</a>
+            <a class="button button-secondary" href="#platform">How it works</a>
           </div>
         </div>
 
@@ -77,23 +78,23 @@
       <section id="platform" class="section section-grid">
         <div class="section-heading">
           <p class="eyebrow">Platform</p>
-          <h2>注文から結果までを、処理単位で設計する。</h2>
+          <h2>From order to result, every job becomes a verifiable task plan.</h2>
         </div>
         <div class="feature-grid">
           <article class="feature-card">
             <span class="feature-index">01</span>
             <h3>Order</h3>
-            <p>ファイル、フォルダ、URL、コード、証明ファイルを注文として受け取り、容量と処理内容から価格を計算します。</p>
+            <p>Dispro accepts files, folders, URLs, code, and proof artifacts, then estimates cost from size and workload profile.</p>
           </article>
           <article class="feature-card">
             <span class="feature-index">02</span>
             <h3>Split</h3>
-            <p>任意のワークロードをチャンクへ分け、compute、verification、canary タスクとして配布できる計画に変換します。</p>
+            <p>Any workload can be split into compute, verification, and canary tasks for reliable distributed execution.</p>
           </article>
           <article class="feature-card">
             <span class="feature-index">03</span>
             <h3>Verify</h3>
-            <p>ランダム照合、既知答えタスク、署名ログで、毎回全件再計算せずに正しさを追跡します。</p>
+            <p>Random checks, known-answer canaries, and signed audit events keep results traceable without recomputing every task.</p>
           </article>
         </div>
       </section>
@@ -101,7 +102,7 @@
       <section id="api" class="section api-section">
         <div class="section-heading">
           <p class="eyebrow">API</p>
-          <h2>サービスや開発環境から、そのまま処理を注文。</h2>
+          <h2>Order processing from apps, CLIs, build systems, and external services.</h2>
         </div>
         <div class="api-layout">
           <pre class="code-panel"><code>POST /orders
@@ -124,11 +125,11 @@
   }
 }</code></pre>
           <div class="api-points">
-            <p>API は注文計画を即時生成し、タスク、割り当て、監査イベントを保存します。</p>
+            <p>The API creates an order plan immediately and persists tasks, assignments, and audit events.</p>
             <ul>
-              <li><code>GET /orders/:id/tasks</code> で Worker 向けタスクを取得</li>
-              <li><code>GET /orders/:id/audit</code> で監査チェーンを検証</li>
-              <li><code>POST /nodes/register</code> で汎用ノードを登録</li>
+              <li><code>GET /orders/:id/tasks</code> returns worker-ready tasks.</li>
+              <li><code>GET /orders/:id/audit</code> verifies the audit hash chain.</li>
+              <li><code>POST /nodes/register</code> registers generic or specialized nodes.</li>
             </ul>
           </div>
         </div>
@@ -137,20 +138,20 @@
       <section id="network" class="section network-section">
         <div class="section-heading">
           <p class="eyebrow">Network</p>
-          <h2>スマホは検証、PC は処理、サーバーは高信頼タスクへ。</h2>
+          <h2>Phones verify, PCs compute, and trusted servers handle high-value work.</h2>
         </div>
         <div class="lane-grid">
           <article class="lane">
             <h3>Light verification</h3>
-            <p>署名確認、ハッシュ照合、罠タスク、ランダムチェックを低負荷ノードへ配ります。</p>
+            <p>Signatures, hashes, random checks, and canary tasks are routed to low-load verification nodes.</p>
           </article>
           <article class="lane">
             <h3>General compute</h3>
-            <p>画像変換、PDF 圧縮、データ整形、コードテストなどを性能と信頼度で割り当てます。</p>
+            <p>Image conversion, PDF compression, data transforms, code tests, and custom workloads are assigned by score.</p>
           </article>
           <article class="lane">
             <h3>Trusted execution</h3>
-            <p>企業向け、高速処理、長時間処理、GPU 処理は高信頼ノードプールで扱います。</p>
+            <p>Enterprise, urgent, long-running, and GPU-heavy jobs can be restricted to high-trust node pools.</p>
           </article>
         </div>
       </section>
@@ -161,6 +162,6 @@
       <span>Verifiable distributed compute marketplace.</span>
     </footer>
 
-    <script src="/app.js" type="module"></script>
+    <script src="app.js" type="module"></script>
   </body>
 </html>

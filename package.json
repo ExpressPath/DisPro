@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:site": "node scripts/build-site.mjs",
     "test": "node --import tsx --test tests/order-orchestrator.test.ts tests/api-server.test.ts",
     "server": "tsx src/server.ts",
     "simulate": "tsx src/cli/simulate-order.ts"
