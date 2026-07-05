@@ -232,3 +232,42 @@ export interface PlannedOrder {
   unassignedTasks: UnassignedTask[];
   auditEvents: AuditEvent[];
 }
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  status: "pending" | "active" | "disabled";
+  createdAt: string;
+  updatedAt: string;
+  lastSignedInAt?: string;
+}
+
+export interface EmailSignInChallenge {
+  id: string;
+  userId: string;
+  email: string;
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: string;
+  consumedAt?: string;
+}
+
+export interface UserSession {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string;
+}
+
+export interface UserApiKey {
+  id: string;
+  userId: string;
+  label: string;
+  keyPrefix: string;
+  keyHash: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  revokedAt?: string;
+}

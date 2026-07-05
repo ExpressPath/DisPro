@@ -7,7 +7,19 @@ const port = Number.parseInt(process.env.PORT ?? "8787", 10);
 const dataPath = process.env.DISPRO_DATA_PATH ?? join(process.cwd(), ".dispro", "state.json");
 const staticDirectory = join(process.cwd(), "public");
 const store = await FileDisproStore.open(dataPath, sampleNodes);
-const server = createDisproHttpServer({ store, staticDirectory });
+const authOptions = {
+  exposeDevSignInLinks: process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS !== "false"
+};
+
+if (process.env.DISPRO_AUTH_BASE_URL !== undefined) {
+  Object.assign(authOptions, { baseUrl: process.env.DISPRO_AUTH_BASE_URL });
+}
+
+const server = createDisproHttpServer({
+  store,
+  staticDirectory,
+  auth: authOptions
+});
 
 server.listen(port, () => {
   console.log(`Dispro API listening on http://localhost:${port}`);

@@ -4,6 +4,18 @@ import { extname, normalize, resolve } from "node:path";
 import { URL } from "node:url";
 import { verifyAuditChain } from "../domain/auditLog.js";
 import type { NodeProfile, OrderRequest } from "../domain/types.js";
+import {
+  AuthError,
+  ConsoleMailer,
+  authenticateBearerToken,
+  createApiKeyForUser,
+  publicApiKey,
+  publicUser,
+  requestEmailSignIn,
+  verifyEmailSignIn,
+  type AuthContext,
+  type Mailer
+} from "../services/authService.js";
 import { planOrder } from "../services/orderOrchestrator.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
@@ -12,6 +24,11 @@ const MAX_JSON_BODY_BYTES = 5 * 1024 * 1024;
 export interface DisproHttpServerOptions {
   store: DisproStore;
   staticDirectory?: string;
+  auth?: {
+    mailer?: Mailer;
+    baseUrl?: string;
+    exposeDevSignInLinks?: boolean;
+  };
   now?: () => Date;
 }
 
@@ -22,10 +39,27 @@ interface JsonResponse {
 
 export function createDisproHttpServer(options: DisproHttpServerOptions): Server {
   const now = options.now ?? (() => new Date());
+  const mailer = options.auth?.mailer ?? new ConsoleMailer();
+  const exposeDevSignInLinks =
+    options.auth?.exposeDevSignInLinks ?? process.env.NODE_ENV !== "production";
 
   return createServer((request, response) => {
-    handleRequest(request, response, options.store, now, options.staticDirectory).catch((error: unknown) => {
-      const status = error instanceof ApiError ? error.status : 500;
+    const context: RequestContext = {
+      store: options.store,
+      now,
+      mailer,
+      exposeDevSignInLinks
+    };
+
+    if (options.staticDirectory !== undefined) {
+      context.staticDirectory = options.staticDirectory;
+    }
+    if (options.auth?.baseUrl !== undefined) {
+      context.authBaseUrl = options.auth.baseUrl;
+    }
+
+    handleRequest(request, response, context).catch((error: unknown) => {
+      const status = error instanceof ApiError || error instanceof AuthError ? error.status : 500;
       const message = error instanceof Error ? error.message : "Unexpected server error.";
       writeJson(response, status, {
         error: {
@@ -37,13 +71,16 @@ export function createDisproHttpServer(options: DisproHttpServerOptions): Server
   });
 }
 
-async function handleRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  store: DisproStore,
-  now: () => Date,
-  staticDirectory: string | undefined
-): Promise<void> {
+interface RequestContext {
+  store: DisproStore;
+  now: () => Date;
+  staticDirectory?: string;
+  mailer: Mailer;
+  authBaseUrl?: string;
+  exposeDevSignInLinks: boolean;
+}
+
+async function handleRequest(request: IncomingMessage, response: ServerResponse, context: RequestContext): Promise<void> {
   if (request.method === "OPTIONS") {
     writeJson(response, 204, null);
     return;
@@ -54,13 +91,13 @@ async function handleRequest(
   const parts = url.pathname.split("/").filter(Boolean);
 
   if (method === "GET") {
-    const staticResponse = await tryServeStatic(url.pathname, response, staticDirectory);
+    const staticResponse = await tryServeStatic(url.pathname, response, context.staticDirectory);
     if (staticResponse) {
       return;
     }
   }
 
-  const result = await route(method, parts, request, store, now, url);
+  const result = await route(method, parts, request, context, url);
   writeJson(response, result.status, result.body);
 }
 
@@ -68,10 +105,11 @@ async function route(
   method: string,
   parts: readonly string[],
   request: IncomingMessage,
-  store: DisproStore,
-  now: () => Date,
+  context: RequestContext,
   url: URL
 ): Promise<JsonResponse> {
+  const { store, now } = context;
+
   if (method === "GET" && parts.length === 1 && parts[0] === "health") {
     return {
       status: 200,
@@ -92,7 +130,83 @@ async function route(
     };
   }
 
+  if (method === "POST" && parts.length === 2 && parts[0] === "auth" && parts[1] === "request-link") {
+    const body = await readJson<{ email?: string; baseUrl?: string }>(request);
+    const result = await requestEmailSignIn(
+      store,
+      context.mailer,
+      {
+        email: body.email ?? "",
+        baseUrl: body.baseUrl ?? context.authBaseUrl ?? getRequestBaseUrl(request),
+        exposeDevLink: context.exposeDevSignInLinks
+      },
+      now()
+    );
+
+    return {
+      status: 202,
+      body: {
+        ok: true,
+        ...result
+      }
+    };
+  }
+
+  if (
+    (method === "POST" || method === "GET") &&
+    parts.length === 2 &&
+    parts[0] === "auth" &&
+    parts[1] === "verify"
+  ) {
+    const token =
+      method === "GET" ? url.searchParams.get("token") ?? "" : (await readJson<{ token?: string }>(request)).token ?? "";
+    const result = await verifyEmailSignIn(store, { token }, now());
+
+    return {
+      status: 200,
+      body: {
+        user: publicUser(result.user),
+        sessionToken: result.sessionToken,
+        sessionExpiresAt: result.sessionExpiresAt
+      }
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "auth" && parts[1] === "me") {
+    const auth = await requireAuth(store, request, now);
+    const apiKeys = await store.listApiKeysForUser(auth.user.id);
+
+    return {
+      status: 200,
+      body: {
+        user: publicUser(auth.user),
+        credential: auth.credential,
+        apiKeys: apiKeys.map((apiKey) => publicApiKey(apiKey))
+      }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "auth" && parts[1] === "api-keys") {
+    const auth = await requireAuth(store, request, now);
+    const body = await readJson<{ label?: string }>(request);
+    const result = await createApiKeyForUser(
+      store,
+      auth.user,
+      body.label === undefined ? {} : { label: body.label },
+      now()
+    );
+
+    return {
+      status: 201,
+      body: {
+        apiKey: publicApiKey(result.apiKey),
+        secret: result.secret
+      }
+    };
+  }
+
   if (method === "POST" && parts.length === 2 && parts[0] === "nodes" && parts[1] === "register") {
+    await requireAuth(store, request, now);
     const node = await readJson<NodeProfile>(request);
     validateNode(node);
     await store.upsertNode(node);
@@ -105,21 +219,25 @@ async function route(
   }
 
   if (method === "GET" && parts.length === 1 && parts[0] === "orders") {
+    const auth = await requireAuth(store, request, now);
+    const summaries = await store.listOrderSummaries();
+
     return {
       status: 200,
       body: {
-        orders: await store.listOrderSummaries()
+        orders: summaries.filter((summary) => summary.customerId === auth.user.id)
       }
     };
   }
 
   if (method === "POST" && parts.length === 1 && parts[0] === "orders") {
+    const auth = await requireAuth(store, request, now);
     const orderRequest = await readJson<OrderRequest>(request);
     const nodes = await store.listNodes();
     const seed = url.searchParams.get("seed") ?? orderRequest.id ?? orderRequest.source?.contentHash;
 
     try {
-      const plan = planOrder(orderRequest, nodes, { now: now(), seed });
+      const plan = planOrder({ ...orderRequest, customerId: auth.user.id }, nodes, { now: now(), seed });
       await store.savePlannedOrder(plan);
       return {
         status: 201,
@@ -132,7 +250,8 @@ async function route(
   }
 
   if (method === "GET" && parts.length === 2 && parts[0] === "orders") {
-    const plan = await getOrderOrThrow(store, parts[1]);
+    const auth = await requireAuth(store, request, now);
+    const plan = await getOrderOrThrow(store, parts[1], auth);
     return {
       status: 200,
       body: plan
@@ -140,7 +259,8 @@ async function route(
   }
 
   if (method === "GET" && parts.length === 3 && parts[0] === "orders" && parts[2] === "tasks") {
-    const plan = await getOrderOrThrow(store, parts[1]);
+    const auth = await requireAuth(store, request, now);
+    const plan = await getOrderOrThrow(store, parts[1], auth);
     return {
       status: 200,
       body: {
@@ -153,7 +273,8 @@ async function route(
   }
 
   if (method === "GET" && parts.length === 3 && parts[0] === "orders" && parts[2] === "audit") {
-    const plan = await getOrderOrThrow(store, parts[1]);
+    const auth = await requireAuth(store, request, now);
+    const plan = await getOrderOrThrow(store, parts[1], auth);
     return {
       status: 200,
       body: {
@@ -167,7 +288,7 @@ async function route(
   throw new ApiError(404, `Route not found: ${method} /${parts.join("/")}`);
 }
 
-async function getOrderOrThrow(store: DisproStore, orderId: string | undefined) {
+async function getOrderOrThrow(store: DisproStore, orderId: string | undefined, auth: AuthContext) {
   if (!orderId) {
     throw new ApiError(404, "Order not found.");
   }
@@ -177,7 +298,15 @@ async function getOrderOrThrow(store: DisproStore, orderId: string | undefined) 
     throw new ApiError(404, `Order not found: ${orderId}`);
   }
 
+  if (plan.order.customerId !== auth.user.id) {
+    throw new ApiError(404, `Order not found: ${orderId}`);
+  }
+
   return plan;
+}
+
+async function requireAuth(store: DisproStore, request: IncomingMessage, now: () => Date): Promise<AuthContext> {
+  return authenticateBearerToken(store, request.headers.authorization, now());
 }
 
 async function readJson<T>(request: IncomingMessage): Promise<T> {
@@ -304,4 +433,16 @@ class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+function getRequestBaseUrl(request: IncomingMessage): string {
+  const forwardedProto = firstHeader(request.headers["x-forwarded-proto"]);
+  const forwardedHost = firstHeader(request.headers["x-forwarded-host"]);
+  const proto = forwardedProto ?? "http";
+  const host = forwardedHost ?? request.headers.host ?? "localhost";
+  return `${proto}://${host}`;
+}
+
+function firstHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
