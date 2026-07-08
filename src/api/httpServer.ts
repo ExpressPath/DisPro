@@ -17,6 +17,16 @@ import {
   type Mailer
 } from "../services/authService.js";
 import { planOrder } from "../services/orderOrchestrator.js";
+import {
+  ProcessError,
+  calculateProcessEarnings,
+  enqueueProcessJobsForPlan,
+  getProcessJobPublicKey,
+  leaseProcessJob,
+  recordProcessHeartbeat,
+  registerProcessNode,
+  submitProcessResult
+} from "../services/processService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
 const MAX_JSON_BODY_BYTES = 5 * 1024 * 1024;
@@ -59,7 +69,8 @@ export function createDisproHttpServer(options: DisproHttpServerOptions): Server
     }
 
     handleRequest(request, response, context).catch((error: unknown) => {
-      const status = error instanceof ApiError || error instanceof AuthError ? error.status : 500;
+      const status =
+        error instanceof ApiError || error instanceof AuthError || error instanceof ProcessError ? error.status : 500;
       const message = error instanceof Error ? error.message : "Unexpected server error.";
       writeJson(response, status, {
         error: {
@@ -188,11 +199,14 @@ async function route(
 
   if (method === "POST" && parts.length === 2 && parts[0] === "auth" && parts[1] === "api-keys") {
     const auth = await requireAuth(store, request, now);
-    const body = await readJson<{ label?: string }>(request);
+    const body = await readJson<{ label?: string; purpose?: "general" | "process" }>(request);
     const result = await createApiKeyForUser(
       store,
       auth.user,
-      body.label === undefined ? {} : { label: body.label },
+      {
+        ...(body.label === undefined ? {} : { label: body.label }),
+        ...(body.purpose === undefined ? {} : { purpose: body.purpose })
+      },
       now()
     );
 
@@ -201,6 +215,113 @@ async function route(
       body: {
         apiKey: publicApiKey(result.apiKey),
         secret: result.secret
+      }
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "process" && parts[1] === "signing-key") {
+    return {
+      status: 200,
+      body: {
+        algorithm: "Ed25519",
+        publicKey: getProcessJobPublicKey()
+      }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "process" && parts[1] === "register") {
+    const auth = await requireProcessAuth(store, request, now);
+    const body = await readJson<Parameters<typeof registerProcessNode>[2]>(request);
+    const node = await registerProcessNode(store, auth, body, now());
+    return {
+      status: 201,
+      body: {
+        node,
+        earnings: await calculateProcessEarnings(store, auth.user.id)
+      }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "process" && parts[1] === "heartbeat") {
+    const auth = await requireProcessAuth(store, request, now);
+    const body = await readJson<Parameters<typeof recordProcessHeartbeat>[2]>(request);
+    const node = await recordProcessHeartbeat(store, auth, body, now());
+    return {
+      status: 200,
+      body: {
+        node
+      }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "process" && parts[1] === "lease") {
+    const auth = await requireProcessAuth(store, request, now);
+    const body = await readJson<Parameters<typeof leaseProcessJob>[2]>(request);
+    return {
+      status: 200,
+      body: await leaseProcessJob(store, auth, body, now())
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "process" && parts[1] === "results") {
+    const auth = await requireProcessAuth(store, request, now);
+    const body = await readJson<Parameters<typeof submitProcessResult>[2]>(request);
+    return {
+      status: 200,
+      body: await submitProcessResult(store, auth, body, now())
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "process" && parts[1] === "earnings") {
+    const auth = await requireProcessAuth(store, request, now);
+    return {
+      status: 200,
+      body: {
+        earnings: await calculateProcessEarnings(store, auth.user.id)
+      }
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "account" && parts[1] === "profile") {
+    const auth = await requireAuth(store, request, now);
+    const [apiKeys, processNodes, transactions, distributedRecords, earnings] = await Promise.all([
+      store.listApiKeysForUser(auth.user.id),
+      store.listProcessNodesForUser(auth.user.id),
+      store.listUserTransactions(auth.user.id),
+      store.listDistributedRecordsForUser(auth.user.id),
+      calculateProcessEarnings(store, auth.user.id)
+    ]);
+
+    return {
+      status: 200,
+      body: {
+        user: publicUser(auth.user),
+        credential: auth.credential,
+        apiKeys: apiKeys.map((apiKey) => publicApiKey(apiKey)),
+        processNodes,
+        transactions,
+        distributedRecords,
+        earnings
+      }
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "account" && parts[1] === "transactions") {
+    const auth = await requireAuth(store, request, now);
+    return {
+      status: 200,
+      body: {
+        transactions: await store.listUserTransactions(auth.user.id)
+      }
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "account" && parts[1] === "distributed-records") {
+    const auth = await requireAuth(store, request, now);
+    return {
+      status: 200,
+      body: {
+        records: await store.listDistributedRecordsForUser(auth.user.id)
       }
     };
   }
@@ -239,6 +360,7 @@ async function route(
     try {
       const plan = planOrder({ ...orderRequest, customerId: auth.user.id }, nodes, { now: now(), seed });
       await store.savePlannedOrder(plan);
+      await enqueueProcessJobsForPlan(store, plan, now());
       return {
         status: 201,
         body: plan
@@ -309,6 +431,14 @@ async function requireAuth(store: DisproStore, request: IncomingMessage, now: ()
   return authenticateBearerToken(store, request.headers.authorization, now());
 }
 
+async function requireProcessAuth(store: DisproStore, request: IncomingMessage, now: () => Date): Promise<AuthContext> {
+  const auth = await requireAuth(store, request, now);
+  if (auth.credential !== "apiKey" || auth.apiKey?.purpose !== "process") {
+    throw new AuthError(403, "A Process API key is required for this endpoint.");
+  }
+  return auth;
+}
+
 async function readJson<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
@@ -349,7 +479,7 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
   response.statusCode = status;
   response.setHeader("access-control-allow-origin", "*");
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-allow-headers", "content-type, authorization");
 
   if (status === 204) {
     response.end();

@@ -1,9 +1,14 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
+  DistributedRecord,
   EmailSignInChallenge,
   NodeProfile,
   PlannedOrder,
+  ProcessJob,
+  ProcessJobResult,
+  ProcessNodeRecord,
+  UserTransaction,
   UserAccount,
   UserApiKey,
   UserSession
@@ -20,6 +25,11 @@ interface PersistedState {
   emailChallenges: EmailSignInChallenge[];
   sessions: UserSession[];
   apiKeys: UserApiKey[];
+  processNodes: ProcessNodeRecord[];
+  processJobs: ProcessJob[];
+  processJobResults: ProcessJobResult[];
+  distributedRecords: DistributedRecord[];
+  userTransactions: UserTransaction[];
 }
 
 export class FileDisproStore implements DisproStore {
@@ -214,6 +224,133 @@ export class FileDisproStore implements DisproStore {
     }
   }
 
+  async upsertProcessNode(node: ProcessNodeRecord): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.processNodes.findIndex((candidate) => candidate.id === node.id);
+
+    if (index >= 0) {
+      state.processNodes[index] = clone(node);
+    } else {
+      state.processNodes.push(clone(node));
+    }
+
+    await this.persist();
+  }
+
+  async getProcessNode(nodeId: string): Promise<ProcessNodeRecord | undefined> {
+    await this.ensureLoaded();
+    const node = this.requireState().processNodes.find((candidate) => candidate.id === nodeId);
+    return node ? clone(node) : undefined;
+  }
+
+  async getProcessNodeByMachine(userId: string, machineId: string): Promise<ProcessNodeRecord | undefined> {
+    await this.ensureLoaded();
+    const node = this.requireState().processNodes.find(
+      (candidate) => candidate.userId === userId && candidate.machineId === machineId
+    );
+    return node ? clone(node) : undefined;
+  }
+
+  async listProcessNodesForUser(userId: string): Promise<ProcessNodeRecord[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().processNodes.filter((candidate) => candidate.userId === userId));
+  }
+
+  async saveProcessJob(job: ProcessJob): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.processJobs.findIndex((candidate) => candidate.id === job.id);
+
+    if (index >= 0) {
+      state.processJobs[index] = clone(job);
+    } else {
+      state.processJobs.push(clone(job));
+    }
+
+    await this.persist();
+  }
+
+  async getProcessJob(jobId: string): Promise<ProcessJob | undefined> {
+    await this.ensureLoaded();
+    const job = this.requireState().processJobs.find((candidate) => candidate.id === jobId);
+    return job ? clone(job) : undefined;
+  }
+
+  async listProcessJobs(): Promise<ProcessJob[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().processJobs);
+  }
+
+  async saveProcessJobResult(result: ProcessJobResult): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.processJobResults.findIndex((candidate) => candidate.id === result.id);
+
+    if (index >= 0) {
+      state.processJobResults[index] = clone(result);
+    } else {
+      state.processJobResults.push(clone(result));
+    }
+
+    await this.persist();
+  }
+
+  async listProcessJobResultsForUser(userId: string): Promise<ProcessJobResult[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().processJobResults.filter((candidate) => candidate.userId === userId));
+  }
+
+  async saveDistributedRecord(record: DistributedRecord): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.distributedRecords.findIndex((candidate) => candidate.id === record.id);
+
+    if (index >= 0) {
+      state.distributedRecords[index] = clone(record);
+    } else {
+      state.distributedRecords.push(clone(record));
+    }
+
+    await this.persist();
+  }
+
+  async listDistributedRecordsForUser(userId: string): Promise<DistributedRecord[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().distributedRecords.filter((candidate) => candidate.userId === userId));
+  }
+
+  async getDistributedRecord(recordId: string): Promise<DistributedRecord | undefined> {
+    await this.ensureLoaded();
+    const record = this.requireState().distributedRecords.find((candidate) => candidate.id === recordId);
+    return record ? clone(record) : undefined;
+  }
+
+  async saveUserTransaction(transaction: UserTransaction): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.userTransactions.findIndex((candidate) => candidate.id === transaction.id);
+
+    if (index >= 0) {
+      state.userTransactions[index] = clone(transaction);
+    } else {
+      state.userTransactions.push(clone(transaction));
+    }
+
+    await this.persist();
+  }
+
+  async listUserTransactions(userId: string): Promise<UserTransaction[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().userTransactions.filter((candidate) => candidate.userId === userId));
+  }
+
+  async getUserTransaction(transactionId: string): Promise<UserTransaction | undefined> {
+    await this.ensureLoaded();
+    const transaction = this.requireState().userTransactions.find((candidate) => candidate.id === transactionId);
+    return transaction ? clone(transaction) : undefined;
+  }
+
   private async load(seedNodes: readonly NodeProfile[]): Promise<void> {
     try {
       const raw = await readFile(this.filePath, "utf8");
@@ -268,7 +405,12 @@ function createEmptyState(seedNodes: readonly NodeProfile[]): PersistedState {
     users: [],
     emailChallenges: [],
     sessions: [],
-    apiKeys: []
+    apiKeys: [],
+    processNodes: [],
+    processJobs: [],
+    processJobResults: [],
+    distributedRecords: [],
+    userTransactions: []
   };
 }
 
@@ -284,7 +426,23 @@ function normalizeState(value: unknown): PersistedState {
     ? (value.emailChallenges as EmailSignInChallenge[])
     : [];
   const sessions = Array.isArray(value.sessions) ? (value.sessions as UserSession[]) : [];
-  const apiKeys = Array.isArray(value.apiKeys) ? (value.apiKeys as UserApiKey[]) : [];
+  const apiKeys = Array.isArray(value.apiKeys)
+    ? (value.apiKeys as UserApiKey[]).map((apiKey) => ({
+        ...apiKey,
+        purpose: apiKey.purpose ?? "general"
+      }))
+    : [];
+  const processNodes = Array.isArray(value.processNodes) ? (value.processNodes as ProcessNodeRecord[]) : [];
+  const processJobs = Array.isArray(value.processJobs) ? (value.processJobs as ProcessJob[]) : [];
+  const processJobResults = Array.isArray(value.processJobResults)
+    ? (value.processJobResults as ProcessJobResult[])
+    : [];
+  const distributedRecords = Array.isArray(value.distributedRecords)
+    ? (value.distributedRecords as DistributedRecord[])
+    : [];
+  const userTransactions = Array.isArray(value.userTransactions)
+    ? (value.userTransactions as UserTransaction[])
+    : [];
   const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString();
 
   return {
@@ -295,7 +453,12 @@ function normalizeState(value: unknown): PersistedState {
     users,
     emailChallenges,
     sessions,
-    apiKeys
+    apiKeys,
+    processNodes,
+    processJobs,
+    processJobResults,
+    distributedRecords,
+    userTransactions
   };
 }
 

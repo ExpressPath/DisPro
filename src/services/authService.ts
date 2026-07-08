@@ -189,7 +189,7 @@ export async function authenticateBearerToken(
 export async function createApiKeyForUser(
   store: DisproStore,
   user: UserAccount,
-  input: { label?: string },
+  input: { label?: string; purpose?: "general" | "process" },
   now = new Date()
 ): Promise<CreateApiKeyResult> {
   if (user.status !== "active") {
@@ -202,6 +202,7 @@ export async function createApiKeyForUser(
     id: makeId("key", { userId: user.id, keyHash: hashSecret(secret), createdAt: nowIso }),
     userId: user.id,
     label: sanitizeLabel(input.label),
+    purpose: input.purpose === "process" ? "process" : "general",
     keyPrefix: secret.slice(0, 12),
     keyHash: hashSecret(secret),
     createdAt: nowIso
@@ -235,6 +236,7 @@ export function publicApiKey(apiKey: UserApiKey): Omit<UserApiKey, "keyHash"> {
     id: apiKey.id,
     userId: apiKey.userId,
     label: apiKey.label,
+    purpose: apiKey.purpose,
     keyPrefix: apiKey.keyPrefix,
     createdAt: apiKey.createdAt
   };

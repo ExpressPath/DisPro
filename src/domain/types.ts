@@ -265,9 +265,129 @@ export interface UserApiKey {
   id: string;
   userId: string;
   label: string;
+  purpose: "general" | "process";
   keyPrefix: string;
   keyHash: string;
   createdAt: string;
   lastUsedAt?: string;
   revokedAt?: string;
+}
+
+export type ProcessNodeMode = "idle" | "waiting" | "running" | "stopped" | "error";
+export type ProcessJobStatus = "queued" | "leased" | "running" | "completed" | "failed" | "rejected";
+export type ProcessPaymentMode = "internal" | "external" | "smart_contract";
+export type ProcessResultStatus = "completed" | "failed" | "rejected";
+export type DistributedRecordType = "user.profile" | "transaction" | "process.result" | "app.update";
+export type DistributedStorageProvider = "ipfs" | "filecoin" | "arweave" | "local";
+
+export interface ProcessNodeInfo {
+  machineId: string;
+  deviceName: string;
+  os: string;
+  appVersion: string;
+  cpuCores: number;
+  memoryGb: number;
+  supportedWorkloads: string[];
+}
+
+export interface ProcessNodeRecord {
+  id: string;
+  userId: string;
+  machineId: string;
+  deviceName: string;
+  os: string;
+  appVersion: string;
+  cpuCores: number;
+  memoryGb: number;
+  supportedWorkloads: string[];
+  mode: ProcessNodeMode;
+  currentJobId?: string;
+  lastHeartbeatAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProcessJob {
+  id: string;
+  orderId: string;
+  taskId: string;
+  workload: string;
+  inputRef: JsonRecord;
+  contractHash: string;
+  cid: string;
+  paymentMode: ProcessPaymentMode;
+  status: ProcessJobStatus;
+  nonce: string;
+  attempts: number;
+  provisionalMicroYen: number;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt?: string;
+  assignedProcessNodeId?: string;
+  assignedUserId?: string;
+  leaseExpiresAt?: string;
+}
+
+export interface SignedProcessJobEnvelope {
+  jobId: string;
+  orderId: string;
+  taskId: string;
+  workload: string;
+  inputRef: JsonRecord;
+  contractHash: string;
+  cid: string;
+  paymentMode: ProcessPaymentMode;
+  expiresAt: string;
+  nonce: string;
+  signature: string;
+}
+
+export interface ProcessJobResult {
+  id: string;
+  jobId: string;
+  processNodeId: string;
+  userId: string;
+  status: ProcessResultStatus;
+  resultHash: string;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface ProcessEarnings {
+  userId: string;
+  provisionalMicroYen: number;
+  confirmedMicroYen: number;
+  processedCount: number;
+  failedCount: number;
+  verificationCount: number;
+}
+
+export interface DistributedRecord {
+  id: string;
+  userId: string;
+  type: DistributedRecordType;
+  provider: DistributedStorageProvider;
+  cid: string;
+  contractHash: string;
+  payloadHash: string;
+  sourceId?: string;
+  status: "pending" | "anchored" | "failed";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserTransaction {
+  id: string;
+  userId: string;
+  kind: "provisional_earning" | "confirmed_earning" | "external_payment" | "smart_contract_payment";
+  amountMicroYen: number;
+  currency: "JPY_MICRO" | "USDC" | "ETH";
+  status: "pending" | "anchored" | "failed" | "settled";
+  relatedJobId?: string;
+  distributedRecordId?: string;
+  createdAt: string;
+  updatedAt: string;
 }

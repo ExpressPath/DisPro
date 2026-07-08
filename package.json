@@ -3,20 +3,52 @@
   "version": "0.1.0",
   "description": "Dispro distributed compute order and task planning foundation.",
   "type": "module",
+  "main": "desktop/process-app/main.mjs",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "build:site": "node scripts/build-site.mjs",
-    "test": "node --import tsx --test tests/order-orchestrator.test.ts tests/api-server.test.ts",
+    "desktop:dev": "electron .",
+    "desktop:pack": "electron-builder --win portable",
+    "desktop:pack:dir": "electron-builder --win dir",
+    "desktop:pack:installer": "electron-builder --win nsis",
+    "test": "node --import tsx --test tests/order-orchestrator.test.ts tests/api-server.test.ts tests/process-runner.test.mjs",
     "server": "tsx src/server.ts",
     "simulate": "tsx src/cli/simulate-order.ts"
+  },
+  "build": {
+    "appId": "app.dispro.process",
+    "productName": "Dispro Process",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/process-app/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
   }
 }

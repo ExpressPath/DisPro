@@ -1,7 +1,12 @@
 import type {
+  DistributedRecord,
   EmailSignInChallenge,
   NodeProfile,
   PlannedOrder,
+  ProcessJob,
+  ProcessJobResult,
+  ProcessNodeRecord,
+  UserTransaction,
   UserAccount,
   UserApiKey,
   UserSession
@@ -42,6 +47,21 @@ export interface DisproStore {
   listApiKeysForUser(userId: string): Promise<UserApiKey[]>;
   getApiKeyByHash(keyHash: string): Promise<UserApiKey | undefined>;
   touchApiKey(apiKeyId: string, usedAt: string): Promise<void>;
+  upsertProcessNode(node: ProcessNodeRecord): Promise<void>;
+  getProcessNode(nodeId: string): Promise<ProcessNodeRecord | undefined>;
+  getProcessNodeByMachine(userId: string, machineId: string): Promise<ProcessNodeRecord | undefined>;
+  listProcessNodesForUser(userId: string): Promise<ProcessNodeRecord[]>;
+  saveProcessJob(job: ProcessJob): Promise<void>;
+  getProcessJob(jobId: string): Promise<ProcessJob | undefined>;
+  listProcessJobs(): Promise<ProcessJob[]>;
+  saveProcessJobResult(result: ProcessJobResult): Promise<void>;
+  listProcessJobResultsForUser(userId: string): Promise<ProcessJobResult[]>;
+  saveDistributedRecord(record: DistributedRecord): Promise<void>;
+  listDistributedRecordsForUser(userId: string): Promise<DistributedRecord[]>;
+  getDistributedRecord(recordId: string): Promise<DistributedRecord | undefined>;
+  saveUserTransaction(transaction: UserTransaction): Promise<void>;
+  listUserTransactions(userId: string): Promise<UserTransaction[]>;
+  getUserTransaction(transactionId: string): Promise<UserTransaction | undefined>;
 }
 
 export function summarizeOrder(plan: PlannedOrder): OrderSummary {

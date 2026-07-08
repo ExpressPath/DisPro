@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dispro Process</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="panel">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>Dispro Process</h1>
+            <p>Earn by running signed, approved processing jobs.</p>
+          </div>
+        </div>
+
+        <div class="mode-row">
+          <button class="mode active" type="button">Earn - Process</button>
+          <button class="mode disabled" type="button" disabled>Use - coming later</button>
+        </div>
+
+        <form id="login-form" class="stack">
+          <label>
+            API Base URL
+            <input id="api-base-url" type="url" value="http://localhost:8787" required />
+          </label>
+          <label>
+            Email address
+            <input id="email" type="email" placeholder="you@example.com" required />
+          </label>
+          <button type="submit">Send sign-in link</button>
+        </form>
+
+        <form id="verify-form" class="stack hidden">
+          <label>
+            Paste sign-in link or token
+            <textarea id="token-or-link" rows="4" required></textarea>
+          </label>
+          <button type="submit">Verify and create Process API key</button>
+        </form>
+
+        <section class="status-grid">
+          <div>
+            <span>Status</span>
+            <strong id="status-mode">stopped</strong>
+          </div>
+          <div>
+            <span>Processed</span>
+            <strong id="processed-count">0</strong>
+          </div>
+          <div>
+            <span>Failed</span>
+            <strong id="failed-count">0</strong>
+          </div>
+          <div>
+            <span>Provisional</span>
+            <strong id="earnings">0 JPY</strong>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button id="start-button" type="button">Start Processing</button>
+          <button id="stop-button" type="button">Stop</button>
+        </div>
+
+        <pre id="log" class="log">Ready.</pre>
+      </section>
+    </main>
+    <script src="renderer.mjs" type="module"></script>
+  </body>
+</html>

@@ -11,12 +11,27 @@ export {
   verifyEmailSignIn
 } from "./services/authService.js";
 export { planOrder } from "./services/orderOrchestrator.js";
+export {
+  DEFAULT_PROCESS_JOB_PUBLIC_KEY,
+  calculateProcessEarnings,
+  createProcessJobFromTask,
+  createSpecialProcessJob,
+  getProcessJobPublicKey,
+  leaseProcessJob,
+  registerProcessNode,
+  signProcessJob,
+  submitProcessResult,
+  verifyProcessJobEnvelope
+} from "./services/processService.js";
 export { FileDisproStore } from "./storage/fileDisproStore.js";
 export { summarizeOrder } from "./storage/disproStore.js";
 export type { DisproStore, OrderSummary } from "./storage/disproStore.js";
 export type {
   AuditEvent,
   DeviceClass,
+  DistributedRecord,
+  DistributedRecordType,
+  DistributedStorageProvider,
   EmailSignInChallenge,
   NodeProfile,
   Order,
@@ -24,11 +39,20 @@ export type {
   PlannedOrder,
   PriceQuote,
   Priority,
+  ProcessEarnings,
+  ProcessJob,
+  ProcessJobResult,
+  ProcessJobStatus,
+  ProcessNodeInfo,
+  ProcessNodeMode,
+  ProcessNodeRecord,
+  SignedProcessJobEnvelope,
   TaskAssignment,
   TaskKind,
   TaskSpec,
   UserAccount,
   UserApiKey,
+  UserTransaction,
   UserSession,
   VerificationLevel,
   WorkloadKind
