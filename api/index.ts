@@ -13,7 +13,7 @@ export default async function handler(request: IncomingMessage, response: Server
   const store = await storePromise;
   const authOptions = {
     mailer: createMailerFromEnv(),
-    exposeDevSignInLinks: process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS !== "false"
+    exposeDevSignInLinks: shouldExposeDevSignInCodes()
   };
 
   if (process.env.DISPRO_AUTH_BASE_URL !== undefined) {
@@ -28,4 +28,11 @@ export default async function handler(request: IncomingMessage, response: Server
       auth: authOptions
     })(request, response);
   });
+}
+
+function shouldExposeDevSignInCodes(): boolean {
+  if (process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS !== undefined) {
+    return process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS === "true";
+  }
+  return process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1";
 }

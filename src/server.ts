@@ -10,7 +10,7 @@ const staticDirectory = join(process.cwd(), "public");
 const store = await FileDisproStore.open(dataPath, sampleNodes);
 const authOptions = {
   mailer: createMailerFromEnv(),
-  exposeDevSignInLinks: process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS !== "false"
+  exposeDevSignInLinks: shouldExposeDevSignInCodes()
 };
 
 if (process.env.DISPRO_AUTH_BASE_URL !== undefined) {
@@ -27,3 +27,10 @@ server.listen(port, () => {
   console.log(`Dispro API listening on http://localhost:${port}`);
   console.log(`State file: ${dataPath}`);
 });
+
+function shouldExposeDevSignInCodes(): boolean {
+  if (process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS !== undefined) {
+    return process.env.DISPRO_EXPOSE_DEV_SIGNIN_LINKS === "true";
+  }
+  return process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1";
+}
