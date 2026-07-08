@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "build:site": "node scripts/build-site.mjs",
+    "build:vercel": "npm run build && npm run build:site",
     "desktop:dev": "electron .",
     "desktop:pack": "electron-builder --win portable",
     "desktop:pack:dir": "electron-builder --win dir",

@@ -1,0 +1,37 @@
+{
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "dist/site",
+  "installCommand": "npm install",
+  "functions": {
+    "api/index.ts": {
+      "runtime": "nodejs24.x",
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/account/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/nodes/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/orders/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/process/:path*",
+      "destination": "/api/index"
+    }
+  ]
+}

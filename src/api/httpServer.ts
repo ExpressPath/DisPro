@@ -48,12 +48,19 @@ interface JsonResponse {
 }
 
 export function createDisproHttpServer(options: DisproHttpServerOptions): Server {
+  const handler = createDisproHttpRequestHandler(options);
+  return createServer(handler);
+}
+
+export function createDisproHttpRequestHandler(
+  options: DisproHttpServerOptions
+): (request: IncomingMessage, response: ServerResponse) => void {
   const now = options.now ?? (() => new Date());
   const mailer = options.auth?.mailer ?? new ConsoleMailer();
   const exposeDevSignInLinks =
     options.auth?.exposeDevSignInLinks ?? process.env.NODE_ENV !== "production";
 
-  return createServer((request, response) => {
+  return (request, response) => {
     const context: RequestContext = {
       store: options.store,
       now,
@@ -79,7 +86,7 @@ export function createDisproHttpServer(options: DisproHttpServerOptions): Server
         }
       });
     });
-  });
+  };
 }
 
 interface RequestContext {

@@ -3,6 +3,7 @@ dist/
 release/
 coverage/
 .dispro/
+.vercel/
 .env
 .env.*
 *.log
