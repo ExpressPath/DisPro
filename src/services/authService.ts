@@ -147,7 +147,12 @@ export async function requestEmailSignIn(
   };
 
   await store.saveEmailChallenge(challenge);
-  await mailer.sendSignInCode({ email, code, expiresAt });
+  try {
+    await mailer.sendSignInCode({ email, code, expiresAt });
+  } catch (error) {
+    console.error("[Dispro auth] Email delivery failed.", error);
+    throw new AuthError(502, "Email delivery failed. Check mail provider credentials.");
+  }
 
   const result: RequestSignInResult = {
     email,
