@@ -141,7 +141,12 @@ async function route(
     };
   }
 
-  if (method === "POST" && parts.length === 2 && parts[0] === "auth" && parts[1] === "request-link") {
+  if (
+    method === "POST" &&
+    parts.length === 2 &&
+    parts[0] === "auth" &&
+    (parts[1] === "request-link" || parts[1] === "request-code")
+  ) {
     const body = await readJson<{ email?: string; baseUrl?: string }>(request);
     const result = await requestEmailSignIn(
       store,
@@ -169,9 +174,11 @@ async function route(
     parts[0] === "auth" &&
     parts[1] === "verify"
   ) {
-    const token =
-      method === "GET" ? url.searchParams.get("token") ?? "" : (await readJson<{ token?: string }>(request)).token ?? "";
-    const result = await verifyEmailSignIn(store, { token }, now());
+    const input =
+      method === "GET"
+        ? { token: url.searchParams.get("token") ?? "" }
+        : await readJson<{ token?: string; email?: string; code?: string }>(request);
+    const result = await verifyEmailSignIn(store, input, now());
 
     return {
       status: 200,

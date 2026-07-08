@@ -46,11 +46,10 @@ export class ProcessController {
   async requestSignInLink(input) {
     const apiBaseUrl = normalizeApiBaseUrl(input.apiBaseUrl);
     await this.checkApiHealth(apiBaseUrl);
-    return apiFetch(apiBaseUrl, "/auth/request-link", {
+    return apiFetch(apiBaseUrl, "/auth/request-code", {
       method: "POST",
       body: {
-        email: input.email,
-        baseUrl: apiBaseUrl
+        email: input.email
       }
     });
   }
@@ -58,10 +57,13 @@ export class ProcessController {
   async verifySignIn(input) {
     const apiBaseUrl = normalizeApiBaseUrl(input.apiBaseUrl);
     await this.checkApiHealth(apiBaseUrl);
-    const token = extractToken(input.tokenOrLink);
+    const code = normalizeVerificationCode(input.code);
     const session = await apiFetch(apiBaseUrl, "/auth/verify", {
       method: "POST",
-      body: { token }
+      body: {
+        email: input.email,
+        code
+      }
     });
     const me = await apiFetch(apiBaseUrl, "/auth/me", {
       token: session.sessionToken
@@ -322,17 +324,12 @@ function normalizeApiBaseUrl(value) {
   return trimmed;
 }
 
-function extractToken(value) {
+function normalizeVerificationCode(value) {
   const raw = String(value ?? "").trim();
-  if (!raw) {
-    throw new Error("Sign-in token or link is required.");
+  if (!/^\d{6}$/.test(raw)) {
+    throw new Error("Enter the 6-digit email verification code.");
   }
-  try {
-    const url = new URL(raw);
-    return url.searchParams.get("token") ?? raw;
-  } catch {
-    return raw;
-  }
+  return raw;
 }
 
 function parseJsonObject(value) {

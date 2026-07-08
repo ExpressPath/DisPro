@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { createTransport, type Transporter } from "nodemailer";
 import { makeId, sha256 } from "../domain/ids.js";
 import type { UserAccount, UserApiKey, UserSession } from "../domain/types.js";
 import type { DisproStore } from "../storage/disproStore.js";
@@ -7,7 +8,7 @@ const EMAIL_CHALLENGE_TTL_MS = 15 * 60 * 1000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface Mailer {
-  sendSignInLink(input: { email: string; signInUrl: string; expiresAt: string }): Promise<void>;
+  sendSignInCode(input: { email: string; code: string; expiresAt: string }): Promise<void>;
 }
 
 export interface AuthContext {
@@ -20,7 +21,7 @@ export interface AuthContext {
 export interface RequestSignInResult {
   email: string;
   expiresAt: string;
-  devSignInUrl?: string;
+  devVerificationCode?: string;
 }
 
 export interface VerifySignInResult {
@@ -35,9 +36,78 @@ export interface CreateApiKeyResult {
 }
 
 export class ConsoleMailer implements Mailer {
-  async sendSignInLink(input: { email: string; signInUrl: string; expiresAt: string }): Promise<void> {
-    console.log(`[Dispro auth] Sign-in link for ${input.email}: ${input.signInUrl} (expires ${input.expiresAt})`);
+  async sendSignInCode(input: { email: string; code: string; expiresAt: string }): Promise<void> {
+    console.log(`[Dispro auth] Verification code for ${input.email}: ${input.code} (expires ${input.expiresAt})`);
   }
+}
+
+export class SmtpMailer implements Mailer {
+  private readonly transporter: Transporter;
+
+  constructor(
+    private readonly options: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      pass: string;
+      from: string;
+    }
+  ) {
+    this.transporter = createTransport({
+      host: options.host,
+      port: options.port,
+      secure: options.secure,
+      auth: {
+        user: options.user,
+        pass: options.pass
+      }
+    });
+  }
+
+  async sendSignInCode(input: { email: string; code: string; expiresAt: string }): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.options.from,
+      to: input.email,
+      subject: "Your Dispro verification code",
+      text: [
+        `Your Dispro verification code is ${input.code}.`,
+        "",
+        "Enter this code in the Dispro Process app to sign in.",
+        `This code expires at ${input.expiresAt}.`,
+        "",
+        "If you did not request this code, you can ignore this email."
+      ].join("\n"),
+      html: [
+        "<p>Your Dispro verification code is:</p>",
+        `<p style=\"font-size:24px;font-weight:700;letter-spacing:4px\">${input.code}</p>`,
+        "<p>Enter this code in the Dispro Process app to sign in.</p>",
+        `<p>This code expires at ${input.expiresAt}.</p>`,
+        "<p>If you did not request this code, you can ignore this email.</p>"
+      ].join("")
+    });
+  }
+}
+
+export function createMailerFromEnv(): Mailer {
+  const host = process.env.DISPRO_SMTP_HOST;
+  const port = Number.parseInt(process.env.DISPRO_SMTP_PORT ?? "587", 10);
+  const user = process.env.DISPRO_SMTP_USER;
+  const pass = process.env.DISPRO_SMTP_PASS;
+  const from = process.env.DISPRO_MAIL_FROM ?? user;
+
+  if (host && user && pass && from) {
+    return new SmtpMailer({
+      host,
+      port,
+      secure: process.env.DISPRO_SMTP_SECURE === "true" || port === 465,
+      user,
+      pass,
+      from
+    });
+  }
+
+  return new ConsoleMailer();
 }
 
 export async function requestEmailSignIn(
@@ -65,21 +135,19 @@ export async function requestEmailSignIn(
     throw new AuthError(403, "This account is disabled.");
   }
 
-  const token = createSecret("ml");
+  const code = createVerificationCode();
   const expiresAt = new Date(now.getTime() + EMAIL_CHALLENGE_TTL_MS).toISOString();
   const challenge = {
-    id: makeId("mlc", { email, tokenHash: hashSecret(token), createdAt: nowIso }),
+    id: makeId("mlc", { email, tokenHash: hashEmailCode(email, code), createdAt: nowIso }),
     userId: user.id,
     email,
-    tokenHash: hashSecret(token),
+    tokenHash: hashEmailCode(email, code),
     createdAt: nowIso,
     expiresAt
   };
 
   await store.saveEmailChallenge(challenge);
-
-  const signInUrl = createSignInUrl(input.baseUrl, token);
-  await mailer.sendSignInLink({ email, signInUrl, expiresAt });
+  await mailer.sendSignInCode({ email, code, expiresAt });
 
   const result: RequestSignInResult = {
     email,
@@ -87,7 +155,7 @@ export async function requestEmailSignIn(
   };
 
   if (input.exposeDevLink) {
-    result.devSignInUrl = signInUrl;
+    result.devVerificationCode = code;
   }
 
   return result;
@@ -95,22 +163,18 @@ export async function requestEmailSignIn(
 
 export async function verifyEmailSignIn(
   store: DisproStore,
-  input: { token: string },
+  input: { token?: string; email?: string; code?: string },
   now = new Date()
 ): Promise<VerifySignInResult> {
-  if (!input.token || input.token.length < 24) {
-    throw new AuthError(400, "A valid sign-in token is required.");
-  }
-
-  const tokenHash = hashSecret(input.token);
+  const tokenHash = verificationHashFromInput(input);
   const challenge = await store.getEmailChallengeByTokenHash(tokenHash);
 
   if (!challenge || challenge.consumedAt) {
-    throw new AuthError(401, "This sign-in link is invalid or has already been used.");
+    throw new AuthError(401, "This verification code is invalid or has already been used.");
   }
 
   if (new Date(challenge.expiresAt).getTime() <= now.getTime()) {
-    throw new AuthError(401, "This sign-in link has expired.");
+    throw new AuthError(401, "This verification code has expired.");
   }
 
   const user = await store.getUser(challenge.userId);
@@ -263,14 +327,33 @@ export function hashSecret(secret: string): string {
   return sha256(`dispro-auth:${secret}`);
 }
 
+export function hashEmailCode(email: string, code: string): string {
+  return hashSecret(`email-code:${normalizeEmail(email)}:${code.trim()}`);
+}
+
 function createSecret(prefix: string): string {
   return `${prefix}_${randomBytes(32).toString("base64url")}`;
 }
 
-function createSignInUrl(baseUrl: string, token: string): string {
-  const url = new URL("/auth/verify", baseUrl);
-  url.searchParams.set("token", token);
-  return url.toString();
+function createVerificationCode(): string {
+  return randomBytes(4).readUInt32BE(0).toString().padStart(10, "0").slice(0, 6);
+}
+
+function verificationHashFromInput(input: { token?: string; email?: string; code?: string }): string {
+  if (input.email !== undefined || input.code !== undefined) {
+    const email = normalizeEmail(input.email ?? "");
+    const code = String(input.code ?? "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      throw new AuthError(400, "A valid 6-digit verification code is required.");
+    }
+    return hashEmailCode(email, code);
+  }
+
+  if (!input.token || input.token.length < 24) {
+    throw new AuthError(400, "A valid verification code is required.");
+  }
+
+  return hashSecret(input.token);
 }
 
 function parseBearerToken(authorizationHeader: string | undefined): string | undefined {

@@ -17,13 +17,23 @@ The default package target is a Windows portable exe. The NSIS installer target 
 
 ## Auth Flow
 
-1. User requests an email magic link from the app.
-2. User pastes the token/link into the app.
+1. User requests an email verification code from the app.
+2. The API sends a 6-digit verification code to the user's email address.
+3. User enters the code into the app.
 3. The app creates a `purpose: "process"` API key.
 4. The API key is stored through the OS credential store via `keytar`.
 5. Process endpoints require a Process API key, not a general key.
 
-No Gmail password or mail-provider secret belongs in the repo. Production mail credentials must stay in environment variables.
+No Gmail password or mail-provider secret belongs in the repo. Production mail credentials must stay in environment variables:
+
+- `DISPRO_SMTP_HOST`
+- `DISPRO_SMTP_PORT`
+- `DISPRO_SMTP_SECURE`
+- `DISPRO_SMTP_USER`
+- `DISPRO_SMTP_PASS`
+- `DISPRO_MAIL_FROM`
+
+If SMTP is not configured, development mode prints the code to the server console and returns `devVerificationCode` from `/auth/request-code`.
 
 ## Signed Process Intake
 

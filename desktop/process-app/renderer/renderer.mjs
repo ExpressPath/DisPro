@@ -2,7 +2,7 @@ const loginForm = document.querySelector("#login-form");
 const verifyForm = document.querySelector("#verify-form");
 const apiBaseUrl = document.querySelector("#api-base-url");
 const email = document.querySelector("#email");
-const tokenOrLink = document.querySelector("#token-or-link");
+const verificationCode = document.querySelector("#verification-code");
 const log = document.querySelector("#log");
 const startButton = document.querySelector("#start-button");
 const stopButton = document.querySelector("#stop-button");
@@ -28,11 +28,11 @@ loginForm.addEventListener("submit", async (event) => {
       email: email.value
     });
     verifyForm.classList.remove("hidden");
-    if (result.devSignInUrl) {
-      tokenOrLink.value = result.devSignInUrl;
-      appendLog("Development sign-in link received. Verify to continue.");
+    if (result.devVerificationCode) {
+      verificationCode.value = result.devVerificationCode;
+      appendLog("Development verification code received. Verify to continue.");
     } else {
-      appendLog(`Sign-in link sent to ${result.email}.`);
+      appendLog(`Verification code sent to ${result.email}.`);
     }
   } catch (error) {
     appendLog(error.message);
@@ -44,7 +44,8 @@ verifyForm.addEventListener("submit", async (event) => {
   try {
     const result = await window.dispro.auth.verify({
       apiBaseUrl: apiBaseUrl.value,
-      tokenOrLink: tokenOrLink.value
+      email: email.value,
+      code: verificationCode.value
     });
     appendLog(`Verified ${result.user.email}. Process API key is ready.`);
   } catch (error) {

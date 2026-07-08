@@ -31,13 +31,13 @@
             Email address
             <input id="email" type="email" placeholder="you@example.com" required />
           </label>
-          <button type="submit">Send sign-in link</button>
+          <button type="submit">Send verification code</button>
         </form>
 
         <form id="verify-form" class="stack hidden">
           <label>
-            Paste sign-in link or token
-            <textarea id="token-or-link" rows="4" required></textarea>
+            Email verification code
+            <input id="verification-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required />
           </label>
           <button type="submit">Verify and create Process API key</button>
         </form>

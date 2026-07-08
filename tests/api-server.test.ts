@@ -216,6 +216,46 @@ test("creates an API key from email sign-in and uses it for protected API calls"
   }
 });
 
+test("rejects reused email verification codes", async () => {
+  const { baseUrl, close } = await createTestApi();
+  const email = "reused-code@example.com";
+
+  try {
+    const requestResponse = await fetch(`${baseUrl}/auth/request-code`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email })
+    });
+    assert.equal(requestResponse.status, 202);
+    const requestBody = (await requestResponse.json()) as { devVerificationCode?: string };
+    assert.match(requestBody.devVerificationCode ?? "", /^\d{6}$/);
+
+    const firstVerifyResponse = await fetch(`${baseUrl}/auth/verify`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email, code: requestBody.devVerificationCode })
+    });
+    assert.equal(firstVerifyResponse.status, 200);
+
+    const secondVerifyResponse = await fetch(`${baseUrl}/auth/verify`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email, code: requestBody.devVerificationCode })
+    });
+    assert.equal(secondVerifyResponse.status, 401);
+    const secondVerifyBody = (await secondVerifyResponse.json()) as { error: { message: string } };
+    assert.match(secondVerifyBody.error.message, /already been used/i);
+  } finally {
+    await close();
+  }
+});
+
 test("registers a process node, leases a signed job, submits result, and reports earnings", async () => {
   const { baseUrl, close, store } = await createTestApi();
 
@@ -595,27 +635,24 @@ async function createTestApi(
 }
 
 async function signInAndGetSessionToken(baseUrl: string, email: string): Promise<string> {
-  const requestResponse = await fetch(`${baseUrl}/auth/request-link`, {
+  const requestResponse = await fetch(`${baseUrl}/auth/request-code`, {
     method: "POST",
     headers: {
       "content-type": "application/json"
     },
-    body: JSON.stringify({ email, baseUrl })
+    body: JSON.stringify({ email })
   });
   assert.equal(requestResponse.status, 202);
 
-  const requestBody = (await requestResponse.json()) as { devSignInUrl?: string };
-  assert.ok(requestBody.devSignInUrl);
-
-  const token = new URL(requestBody.devSignInUrl).searchParams.get("token");
-  assert.ok(token);
+  const requestBody = (await requestResponse.json()) as { devVerificationCode?: string };
+  assert.match(requestBody.devVerificationCode ?? "", /^\d{6}$/);
 
   const verifyResponse = await fetch(`${baseUrl}/auth/verify`, {
     method: "POST",
     headers: {
       "content-type": "application/json"
     },
-    body: JSON.stringify({ token })
+    body: JSON.stringify({ email, code: requestBody.devVerificationCode })
   });
   assert.equal(verifyResponse.status, 200);
 
