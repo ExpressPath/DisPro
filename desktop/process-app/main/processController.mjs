@@ -45,6 +45,7 @@ export class ProcessController {
 
   async requestSignInLink(input) {
     const apiBaseUrl = normalizeApiBaseUrl(input.apiBaseUrl);
+    await this.checkApiHealth(apiBaseUrl);
     return apiFetch(apiBaseUrl, "/auth/request-link", {
       method: "POST",
       body: {
@@ -56,6 +57,7 @@ export class ProcessController {
 
   async verifySignIn(input) {
     const apiBaseUrl = normalizeApiBaseUrl(input.apiBaseUrl);
+    await this.checkApiHealth(apiBaseUrl);
     const token = extractToken(input.tokenOrLink);
     const session = await apiFetch(apiBaseUrl, "/auth/verify", {
       method: "POST",
@@ -93,6 +95,26 @@ export class ProcessController {
       signedIn: true,
       user: session.user
     };
+  }
+
+  async clearStoredAuth() {
+    await this.stop().catch(() => undefined);
+    await this.credentials.clearAuth();
+    this.auth = undefined;
+    this.node = undefined;
+    this.publicKey = undefined;
+    this.status = {
+      mode: "stopped",
+      connected: false,
+      processedJobs: 0,
+      failedJobs: 0,
+      verificationJobs: 0,
+      provisionalMicroYen: 0,
+      update: null,
+      message: "Stored sign-in cleared"
+    };
+    this.emit();
+    return { ok: true };
   }
 
   async start() {
@@ -153,6 +175,12 @@ export class ProcessController {
     });
     this.applyEarnings(response.earnings);
     return response.node;
+  }
+
+  async checkApiHealth(apiBaseUrl) {
+    await apiFetch(apiBaseUrl, "/health").catch((error) => {
+      throw new Error(`${error.message} Start the Dispro API with npm.cmd run server, or enter the official API URL.`);
+    });
   }
 
   schedulePoll(delayMs = POLL_INTERVAL_MS) {
@@ -263,15 +291,25 @@ async function apiFetch(apiBaseUrl, path, options = {}) {
     headers.authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body)
-  });
+  let response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body)
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot reach Dispro API at ${apiBaseUrl}: ${reason}.`);
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? `API request failed with ${response.status}`);
+    const message = payload?.error?.message ?? `API request failed with ${response.status}`;
+    if (response.status === 403 && /Process API key/i.test(message)) {
+      throw new Error(`${message} Clear stored sign-in and sign in again to create a Process key.`);
+    }
+    throw new Error(message);
   }
   return payload;
 }

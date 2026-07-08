@@ -28,6 +28,15 @@ export function createCredentialStore(serviceName) {
         sessionToken,
         processApiKey
       };
+    },
+
+    async clearAuth() {
+      const keytar = await loadKeytar();
+      await Promise.all([
+        keytar.deletePassword(serviceName, API_BASE_URL_KEY),
+        keytar.deletePassword(serviceName, SESSION_TOKEN_KEY),
+        keytar.deletePassword(serviceName, PROCESS_API_KEY_KEY)
+      ]);
     }
   };
 }
@@ -54,5 +63,9 @@ const memoryCredentialStore = {
   },
   async getPassword(service, account) {
     return memory.get(`${service}:${account}`) ?? null;
+  },
+  async deletePassword(service, account) {
+    memory.delete(`${service}:${account}`);
+    return true;
   }
 };

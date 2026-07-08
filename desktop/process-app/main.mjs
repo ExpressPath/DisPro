@@ -57,6 +57,10 @@ ipcMain.handle("auth:verify", async (_event, input) => {
   return controller.verifySignIn(input);
 });
 
+ipcMain.handle("auth:clear", async () => {
+  return controller.clearStoredAuth();
+});
+
 ipcMain.handle("process:start", async () => {
   return controller.start();
 });

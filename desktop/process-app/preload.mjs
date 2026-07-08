@@ -4,7 +4,8 @@ contextBridge.exposeInMainWorld("dispro", {
   auth: {
     load: () => ipcRenderer.invoke("auth:load"),
     requestLink: (input) => ipcRenderer.invoke("auth:request-link", input),
-    verify: (input) => ipcRenderer.invoke("auth:verify", input)
+    verify: (input) => ipcRenderer.invoke("auth:verify", input),
+    clear: () => ipcRenderer.invoke("auth:clear")
   },
   process: {
     start: () => ipcRenderer.invoke("process:start"),

@@ -6,6 +6,7 @@ const tokenOrLink = document.querySelector("#token-or-link");
 const log = document.querySelector("#log");
 const startButton = document.querySelector("#start-button");
 const stopButton = document.querySelector("#stop-button");
+const clearAuthButton = document.querySelector("#clear-auth-button");
 
 window.dispro.process.onStatus(renderStatus);
 
@@ -62,6 +63,15 @@ startButton.addEventListener("click", async () => {
 stopButton.addEventListener("click", async () => {
   try {
     await window.dispro.process.stop();
+  } catch (error) {
+    appendLog(error.message);
+  }
+});
+
+clearAuthButton.addEventListener("click", async () => {
+  try {
+    await window.dispro.auth.clear();
+    appendLog("Stored sign-in cleared. Sign in again to create a fresh Process API key.");
   } catch (error) {
     appendLog(error.message);
   }
