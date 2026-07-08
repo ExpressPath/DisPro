@@ -10,6 +10,7 @@ import type {
   ProcessNodeInfo,
   ProcessNodeMode,
   ProcessNodeRecord,
+  ProcessResultMetrics,
   ProcessResultStatus,
   SignedProcessJobEnvelope,
   TaskSpec,
@@ -65,6 +66,7 @@ export interface SubmitResultInput {
   stdout?: string;
   stderr?: string;
   durationMs: number;
+  metrics?: Partial<ProcessResultMetrics>;
   errorMessage?: string;
 }
 
@@ -229,6 +231,7 @@ export async function submitProcessResult(
     stdout: clampOutput(input.stdout ?? ""),
     stderr: clampOutput(input.stderr ?? ""),
     durationMs: Math.max(0, input.durationMs),
+    metrics: normalizeResultMetrics(input.durationMs, input.metrics),
     createdAt: now.toISOString()
   };
 
@@ -286,6 +289,24 @@ export async function createDistributedRecordForUser(
   now = new Date()
 ): Promise<ProcessJob> {
   return ensureUserSnapshotAnchorJob(store, user, now);
+}
+
+export async function enqueueDistributedRecordAnchorJob(
+  store: DisproStore,
+  userId: string,
+  inputRef: JsonRecord,
+  sourceId: string,
+  now = new Date()
+): Promise<ProcessJob> {
+  return ensureSpecialJob(store, userId, "dispro.storage.anchor", sourceId, inputRef, now);
+}
+
+export async function enqueueTransactionAnchorJob(
+  store: DisproStore,
+  transaction: UserTransaction,
+  now = new Date()
+): Promise<ProcessJob> {
+  return ensureTransactionAnchorJob(store, transaction, now);
 }
 
 export async function enqueueProcessJobsForPlan(
@@ -446,7 +467,9 @@ async function ensureTransactionAnchorJob(
         amountMicroYen: transaction.amountMicroYen,
         currency: transaction.currency,
         status: transaction.status,
-        relatedJobId: transaction.relatedJobId
+        relatedJobId: transaction.relatedJobId,
+        relatedOrderId: transaction.relatedOrderId,
+        stripePaymentIntentId: transaction.stripePaymentIntentId
       })
     },
     now
@@ -556,7 +579,10 @@ async function handleSpecialProcessResult(
 
   const parsed = parseResultJson(result.stdout);
   const sourceId = typeof job.inputRef.sourceId === "string" ? job.inputRef.sourceId : job.id;
-  const recordType = job.workload === "dispro.app.update" ? "app.update" : job.workload === "dispro.transaction.anchor" ? "transaction" : "user.profile";
+  const recordType = parseDistributedRecordType(
+    job.inputRef.recordType,
+    job.workload === "dispro.app.update" ? "app.update" : job.workload === "dispro.transaction.anchor" ? "transaction" : "user.profile"
+  );
   const nowIso = now.toISOString();
   const record: DistributedRecord = {
     id: makeId("drec", { userId, sourceId, cid: parsed.cid ?? result.resultHash }),
@@ -597,6 +623,44 @@ function parseResultJson(value: string): Record<string, unknown> {
 
 function parseProvider(value: unknown): "ipfs" | "filecoin" | "arweave" | "local" {
   return value === "ipfs" || value === "filecoin" || value === "arweave" || value === "local" ? value : "local";
+}
+
+function parseDistributedRecordType(value: unknown, fallback: DistributedRecord["type"]): DistributedRecord["type"] {
+  return value === "user.profile" ||
+    value === "transaction" ||
+    value === "process.result" ||
+    value === "app.update" ||
+    value === "order.contract" ||
+    value === "order.result" ||
+    value === "billing.charge"
+    ? value
+    : fallback;
+}
+
+function normalizeResultMetrics(durationMs: number, metrics: Partial<ProcessResultMetrics> | undefined): ProcessResultMetrics {
+  const normalized: ProcessResultMetrics = {
+    durationMs: Math.max(0, durationMs)
+  };
+
+  if (!metrics) {
+    return normalized;
+  }
+
+  assignPositiveNumber(normalized, "inputBytes", metrics.inputBytes);
+  assignPositiveNumber(normalized, "outputBytes", metrics.outputBytes);
+  assignPositiveNumber(normalized, "computeUnits", metrics.computeUnits);
+  assignPositiveNumber(normalized, "runnerWorkUnits", metrics.runnerWorkUnits);
+  return normalized;
+}
+
+function assignPositiveNumber(
+  target: ProcessResultMetrics,
+  key: "inputBytes" | "outputBytes" | "computeUnits" | "runnerWorkUnits",
+  value: unknown
+): void {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    target[key] = value;
+  }
 }
 
 async function requireOwnedNode(store: DisproStore, auth: AuthContext, nodeId: string): Promise<ProcessNodeRecord> {

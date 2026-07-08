@@ -3,11 +3,15 @@ import { createDisproHttpServer } from "./api/httpServer.js";
 import { sampleNodes } from "./sample/sampleNodes.js";
 import { createMailerFromEnv } from "./services/authService.js";
 import { FileDisproStore } from "./storage/fileDisproStore.js";
+import { NeonDisproStore } from "./storage/neonDisproStore.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
 const dataPath = process.env.DISPRO_DATA_PATH ?? join(process.cwd(), ".dispro", "state.json");
 const staticDirectory = join(process.cwd(), "public");
-const store = await FileDisproStore.open(dataPath, sampleNodes);
+const store =
+  process.env.DATABASE_URL === undefined
+    ? await FileDisproStore.open(dataPath, sampleNodes)
+    : await NeonDisproStore.open(process.env.DATABASE_URL, sampleNodes);
 const authOptions = {
   mailer: createMailerFromEnv(),
   exposeDevSignInLinks: shouldExposeDevSignInCodes()

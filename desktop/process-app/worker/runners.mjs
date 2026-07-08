@@ -24,21 +24,25 @@ export async function executeSignedProcessJob(envelope, options) {
   }
 
   try {
+    const startedAt = Date.now();
     const output = await runWorkload(envelope.workload, envelope.inputRef);
     const stdout = JSON.stringify(output);
     return {
       status: "completed",
       resultHash: sha256(stdout),
       stdout,
-      stderr: ""
+      stderr: "",
+      metrics: createMetrics(envelope.inputRef, stdout, startedAt)
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       status: "failed",
-      resultHash: sha256(String(error instanceof Error ? error.message : error)),
+      resultHash: sha256(message),
       stdout: "",
       stderr: "",
-      errorMessage: error instanceof Error ? error.message : String(error)
+      metrics: createMetrics(envelope.inputRef, "", Date.now()),
+      errorMessage: message
     };
   }
 }
@@ -126,7 +130,26 @@ function rejected(errorMessage) {
     resultHash: sha256(errorMessage),
     stdout: "",
     stderr: "",
+    metrics: {
+      durationMs: 0,
+      inputBytes: 0,
+      outputBytes: 0,
+      computeUnits: 0,
+      runnerWorkUnits: 0
+    },
     errorMessage
+  };
+}
+
+function createMetrics(inputRef, stdout, startedAt) {
+  const inputBytes = Buffer.byteLength(stableStringify(inputRef), "utf8");
+  const outputBytes = Buffer.byteLength(stdout, "utf8");
+  return {
+    durationMs: Math.max(0, Date.now() - startedAt),
+    inputBytes,
+    outputBytes,
+    computeUnits: Math.max(1, Math.ceil(inputBytes / 1_000_000)),
+    runnerWorkUnits: Math.max(1, Math.ceil((inputBytes + outputBytes) / 1_000_000))
   };
 }
 

@@ -16,5 +16,14 @@ contextBridge.exposeInMainWorld("dispro", {
       ipcRenderer.on("process:status", listener);
       return () => ipcRenderer.removeListener("process:status", listener);
     }
+  },
+  billing: {
+    status: (setupSessionId) => ipcRenderer.invoke("billing:status", setupSessionId),
+    setup: () => ipcRenderer.invoke("billing:setup")
+  },
+  use: {
+    createOrder: (input) => ipcRenderer.invoke("use:create-order", input),
+    getOrder: (orderId) => ipcRenderer.invoke("use:get-order", orderId),
+    getResult: (orderId) => ipcRenderer.invoke("use:get-result", orderId)
   }
 });

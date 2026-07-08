@@ -1,6 +1,7 @@
 const API_BASE_URL_KEY = "apiBaseUrl";
 const SESSION_TOKEN_KEY = "sessionToken";
 const PROCESS_API_KEY_KEY = "processApiKey";
+const USE_API_KEY_KEY = "useApiKey";
 
 export function createCredentialStore(serviceName) {
   return {
@@ -9,14 +10,18 @@ export function createCredentialStore(serviceName) {
       await keytar.setPassword(serviceName, API_BASE_URL_KEY, auth.apiBaseUrl);
       await keytar.setPassword(serviceName, SESSION_TOKEN_KEY, auth.sessionToken);
       await keytar.setPassword(serviceName, PROCESS_API_KEY_KEY, auth.processApiKey);
+      if (auth.useApiKey) {
+        await keytar.setPassword(serviceName, USE_API_KEY_KEY, auth.useApiKey);
+      }
     },
 
     async loadAuth() {
       const keytar = await loadKeytar();
-      const [apiBaseUrl, sessionToken, processApiKey] = await Promise.all([
+      const [apiBaseUrl, sessionToken, processApiKey, useApiKey] = await Promise.all([
         keytar.getPassword(serviceName, API_BASE_URL_KEY),
         keytar.getPassword(serviceName, SESSION_TOKEN_KEY),
-        keytar.getPassword(serviceName, PROCESS_API_KEY_KEY)
+        keytar.getPassword(serviceName, PROCESS_API_KEY_KEY),
+        keytar.getPassword(serviceName, USE_API_KEY_KEY)
       ]);
 
       if (!apiBaseUrl || !sessionToken || !processApiKey) {
@@ -26,7 +31,8 @@ export function createCredentialStore(serviceName) {
       return {
         apiBaseUrl,
         sessionToken,
-        processApiKey
+        processApiKey,
+        useApiKey: useApiKey ?? undefined
       };
     },
 
@@ -35,7 +41,8 @@ export function createCredentialStore(serviceName) {
       await Promise.all([
         keytar.deletePassword(serviceName, API_BASE_URL_KEY),
         keytar.deletePassword(serviceName, SESSION_TOKEN_KEY),
-        keytar.deletePassword(serviceName, PROCESS_API_KEY_KEY)
+        keytar.deletePassword(serviceName, PROCESS_API_KEY_KEY),
+        keytar.deletePassword(serviceName, USE_API_KEY_KEY)
       ]);
     }
   };

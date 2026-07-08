@@ -5,6 +5,12 @@ import { URL } from "node:url";
 import { verifyAuditChain } from "../domain/auditLog.js";
 import type { NodeProfile, OrderRequest } from "../domain/types.js";
 import {
+  BillingError,
+  createBillingSetupSession,
+  getBillingStatus,
+  handleStripeWebhook
+} from "../services/billingService.js";
+import {
   AuthError,
   ConsoleMailer,
   authenticateBearerToken,
@@ -27,6 +33,13 @@ import {
   registerProcessNode,
   submitProcessResult
 } from "../services/processService.js";
+import {
+  UseOrderError,
+  createUseOrder,
+  getUseOrder,
+  getUseOrderResult,
+  listUseOrders
+} from "../services/useOrderService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
 const MAX_JSON_BODY_BYTES = 5 * 1024 * 1024;
@@ -77,7 +90,13 @@ export function createDisproHttpRequestHandler(
 
     handleRequest(request, response, context).catch((error: unknown) => {
       const status =
-        error instanceof ApiError || error instanceof AuthError || error instanceof ProcessError ? error.status : 500;
+        error instanceof ApiError ||
+        error instanceof AuthError ||
+        error instanceof ProcessError ||
+        error instanceof BillingError ||
+        error instanceof UseOrderError
+          ? error.status
+          : 500;
       const message = error instanceof Error ? error.message : "Unexpected server error.";
       writeJson(response, status, {
         error: {
@@ -213,7 +232,7 @@ async function route(
 
   if (method === "POST" && parts.length === 2 && parts[0] === "auth" && parts[1] === "api-keys") {
     const auth = await requireAuth(store, request, now);
-    const body = await readJson<{ label?: string; purpose?: "general" | "process" }>(request);
+    const body = await readJson<{ label?: string; purpose?: "general" | "process" | "use" }>(request);
     const result = await createApiKeyForUser(
       store,
       auth.user,
@@ -230,6 +249,84 @@ async function route(
         apiKey: publicApiKey(result.apiKey),
         secret: result.secret
       }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "billing" && parts[1] === "setup-session") {
+    const auth = await requireAuth(store, request, now);
+    const body = await readJson<{ successUrl?: string; cancelUrl?: string }>(request);
+    return {
+      status: 201,
+      body: await createBillingSetupSession(
+        store,
+        auth,
+        {
+          baseUrl: getRequestBaseUrl(request),
+          ...(body.successUrl === undefined ? {} : { successUrl: body.successUrl }),
+          ...(body.cancelUrl === undefined ? {} : { cancelUrl: body.cancelUrl })
+        },
+        now()
+      )
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "billing" && parts[1] === "status") {
+    const auth = await requireAuth(store, request, now);
+    return {
+      status: 200,
+      body: await getBillingStatus(store, auth, url.searchParams.get("setup_session_id") ?? undefined, now())
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "billing" && parts[1] === "webhook") {
+    const rawBody = await readRawBody(request);
+    return {
+      status: 200,
+      body: await handleStripeWebhook(store, rawBody, firstHeader(request.headers["stripe-signature"]), now())
+    };
+  }
+
+  if (method === "GET" && parts.length === 2 && parts[0] === "use" && parts[1] === "orders") {
+    const auth = await requireUseAuth(store, request, now);
+    return {
+      status: 200,
+      body: {
+        orders: await listUseOrders(store, auth, now())
+      }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "use" && parts[1] === "orders") {
+    const auth = await requireUseAuth(store, request, now);
+    const body = await readJson<OrderRequest & { maxChargeMicroYen?: number }>(request);
+    const seed = url.searchParams.get("seed") ?? body.id ?? body.source?.contentHash;
+    try {
+      return {
+        status: 201,
+        body: await createUseOrder(store, auth, body, now(), seed)
+      };
+    } catch (error) {
+      if (error instanceof UseOrderError || error instanceof BillingError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : "Invalid Use order request.";
+      throw new ApiError(400, message);
+    }
+  }
+
+  if (method === "GET" && parts.length === 3 && parts[0] === "use" && parts[1] === "orders") {
+    const auth = await requireUseAuth(store, request, now);
+    return {
+      status: 200,
+      body: await getUseOrder(store, auth, parts[2] ?? "", now())
+    };
+  }
+
+  if (method === "GET" && parts.length === 4 && parts[0] === "use" && parts[1] === "orders" && parts[3] === "result") {
+    const auth = await requireUseAuth(store, request, now);
+    return {
+      status: 200,
+      body: await getUseOrderResult(store, auth, parts[2] ?? "", now())
     };
   }
 
@@ -298,11 +395,13 @@ async function route(
 
   if (method === "GET" && parts.length === 2 && parts[0] === "account" && parts[1] === "profile") {
     const auth = await requireAuth(store, request, now);
-    const [apiKeys, processNodes, transactions, distributedRecords, earnings] = await Promise.all([
+    const [apiKeys, processNodes, transactions, distributedRecords, useOrders, billing, earnings] = await Promise.all([
       store.listApiKeysForUser(auth.user.id),
       store.listProcessNodesForUser(auth.user.id),
       store.listUserTransactions(auth.user.id),
       store.listDistributedRecordsForUser(auth.user.id),
+      store.listUseOrdersForUser(auth.user.id),
+      getBillingStatus(store, auth, undefined, now()),
       calculateProcessEarnings(store, auth.user.id)
     ]);
 
@@ -313,6 +412,8 @@ async function route(
         credential: auth.credential,
         apiKeys: apiKeys.map((apiKey) => publicApiKey(apiKey)),
         processNodes,
+        useOrders,
+        billing,
         transactions,
         distributedRecords,
         earnings
@@ -453,6 +554,14 @@ async function requireProcessAuth(store: DisproStore, request: IncomingMessage, 
   return auth;
 }
 
+async function requireUseAuth(store: DisproStore, request: IncomingMessage, now: () => Date): Promise<AuthContext> {
+  const auth = await requireAuth(store, request, now);
+  if (auth.credential !== "apiKey" || auth.apiKey?.purpose !== "use") {
+    throw new AuthError(403, "A Use API key is required for this endpoint.");
+  }
+  return auth;
+}
+
 async function readJson<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
@@ -479,6 +588,24 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
   }
 }
 
+async function readRawBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.byteLength;
+
+    if (totalBytes > MAX_JSON_BODY_BYTES) {
+      throw new ApiError(413, "Request body is too large.");
+    }
+
+    chunks.push(buffer);
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 function validateNode(node: NodeProfile): void {
   if (!isRecord(node) || typeof node.id !== "string" || node.id.trim().length === 0) {
     throw new ApiError(400, "node.id is required.");
@@ -493,7 +620,7 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
   response.statusCode = status;
   response.setHeader("access-control-allow-origin", "*");
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type, authorization");
+  response.setHeader("access-control-allow-headers", "content-type, authorization, stripe-signature");
 
   if (status === 204) {
     response.end();

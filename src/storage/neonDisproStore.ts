@@ -1,5 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { neon } from "@neondatabase/serverless";
 import type {
   BillingCustomer,
   DistributedRecord,
@@ -10,10 +9,10 @@ import type {
   ProcessJobResult,
   ProcessNodeRecord,
   UseOrderRecord,
-  UserTransaction,
   UserAccount,
   UserApiKey,
-  UserSession
+  UserSession,
+  UserTransaction
 } from "../domain/types.js";
 import type { DisproStore, OrderSummary } from "./disproStore.js";
 import { summarizeOrder } from "./disproStore.js";
@@ -36,13 +35,18 @@ interface PersistedState {
   userTransactions: UserTransaction[];
 }
 
-export class FileDisproStore implements DisproStore {
+export class NeonDisproStore implements DisproStore {
   private state: PersistedState | undefined;
+  private readonly sql: ReturnType<typeof neon>;
+  private readonly stateKey: string;
 
-  constructor(private readonly filePath: string) {}
+  private constructor(databaseUrl: string, stateKey: string) {
+    this.sql = neon(databaseUrl);
+    this.stateKey = stateKey;
+  }
 
-  static async open(filePath: string, seedNodes: readonly NodeProfile[] = []): Promise<FileDisproStore> {
-    const store = new FileDisproStore(filePath);
+  static async open(databaseUrl: string, seedNodes: readonly NodeProfile[] = []): Promise<NeonDisproStore> {
+    const store = new NeonDisproStore(databaseUrl, process.env.DISPRO_NEON_STATE_KEY ?? "default");
     await store.load(seedNodes);
     return store;
   }
@@ -67,15 +71,7 @@ export class FileDisproStore implements DisproStore {
 
   async savePlannedOrder(plan: PlannedOrder): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.orders.findIndex((order) => order.order.id === plan.order.id);
-
-    if (index >= 0) {
-      state.orders[index] = clone(plan);
-    } else {
-      state.orders.push(clone(plan));
-    }
-
+    upsertBy(this.requireState().orders, plan, (candidate) => candidate.order.id === plan.order.id);
     await this.persist();
   }
 
@@ -92,15 +88,7 @@ export class FileDisproStore implements DisproStore {
 
   async upsertNode(node: NodeProfile): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.nodes.findIndex((candidate) => candidate.id === node.id);
-
-    if (index >= 0) {
-      state.nodes[index] = clone(node);
-    } else {
-      state.nodes.push(clone(node));
-    }
-
+    upsertBy(this.requireState().nodes, node, (candidate) => candidate.id === node.id);
     await this.persist();
   }
 
@@ -123,29 +111,13 @@ export class FileDisproStore implements DisproStore {
 
   async upsertUser(user: UserAccount): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.users.findIndex((candidate) => candidate.id === user.id);
-
-    if (index >= 0) {
-      state.users[index] = clone(user);
-    } else {
-      state.users.push(clone(user));
-    }
-
+    upsertBy(this.requireState().users, user, (candidate) => candidate.id === user.id);
     await this.persist();
   }
 
   async saveEmailChallenge(challenge: EmailSignInChallenge): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.emailChallenges.findIndex((candidate) => candidate.id === challenge.id);
-
-    if (index >= 0) {
-      state.emailChallenges[index] = clone(challenge);
-    } else {
-      state.emailChallenges.push(clone(challenge));
-    }
-
+    upsertBy(this.requireState().emailChallenges, challenge, (candidate) => candidate.id === challenge.id);
     await this.persist();
   }
 
@@ -157,8 +129,7 @@ export class FileDisproStore implements DisproStore {
 
   async markEmailChallengeConsumed(challengeId: string, consumedAt: string): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const challenge = state.emailChallenges.find((candidate) => candidate.id === challengeId);
+    const challenge = this.requireState().emailChallenges.find((candidate) => candidate.id === challengeId);
     if (challenge) {
       challenge.consumedAt = consumedAt;
       await this.persist();
@@ -167,15 +138,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveSession(session: UserSession): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.sessions.findIndex((candidate) => candidate.id === session.id);
-
-    if (index >= 0) {
-      state.sessions[index] = clone(session);
-    } else {
-      state.sessions.push(clone(session));
-    }
-
+    upsertBy(this.requireState().sessions, session, (candidate) => candidate.id === session.id);
     await this.persist();
   }
 
@@ -196,15 +159,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveApiKey(apiKey: UserApiKey): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.apiKeys.findIndex((candidate) => candidate.id === apiKey.id);
-
-    if (index >= 0) {
-      state.apiKeys[index] = clone(apiKey);
-    } else {
-      state.apiKeys.push(clone(apiKey));
-    }
-
+    upsertBy(this.requireState().apiKeys, apiKey, (candidate) => candidate.id === apiKey.id);
     await this.persist();
   }
 
@@ -230,15 +185,7 @@ export class FileDisproStore implements DisproStore {
 
   async upsertProcessNode(node: ProcessNodeRecord): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.processNodes.findIndex((candidate) => candidate.id === node.id);
-
-    if (index >= 0) {
-      state.processNodes[index] = clone(node);
-    } else {
-      state.processNodes.push(clone(node));
-    }
-
+    upsertBy(this.requireState().processNodes, node, (candidate) => candidate.id === node.id);
     await this.persist();
   }
 
@@ -263,15 +210,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveProcessJob(job: ProcessJob): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.processJobs.findIndex((candidate) => candidate.id === job.id);
-
-    if (index >= 0) {
-      state.processJobs[index] = clone(job);
-    } else {
-      state.processJobs.push(clone(job));
-    }
-
+    upsertBy(this.requireState().processJobs, job, (candidate) => candidate.id === job.id);
     await this.persist();
   }
 
@@ -288,15 +227,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveProcessJobResult(result: ProcessJobResult): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.processJobResults.findIndex((candidate) => candidate.id === result.id);
-
-    if (index >= 0) {
-      state.processJobResults[index] = clone(result);
-    } else {
-      state.processJobResults.push(clone(result));
-    }
-
+    upsertBy(this.requireState().processJobResults, result, (candidate) => candidate.id === result.id);
     await this.persist();
   }
 
@@ -312,15 +243,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveUseOrder(order: UseOrderRecord): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.useOrders.findIndex((candidate) => candidate.id === order.id);
-
-    if (index >= 0) {
-      state.useOrders[index] = clone(order);
-    } else {
-      state.useOrders.push(clone(order));
-    }
-
+    upsertBy(this.requireState().useOrders, order, (candidate) => candidate.id === order.id);
     await this.persist();
   }
 
@@ -337,15 +260,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveBillingCustomer(customer: BillingCustomer): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.billingCustomers.findIndex((candidate) => candidate.userId === customer.userId);
-
-    if (index >= 0) {
-      state.billingCustomers[index] = clone(customer);
-    } else {
-      state.billingCustomers.push(clone(customer));
-    }
-
+    upsertBy(this.requireState().billingCustomers, customer, (candidate) => candidate.userId === customer.userId);
     await this.persist();
   }
 
@@ -365,15 +280,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveDistributedRecord(record: DistributedRecord): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.distributedRecords.findIndex((candidate) => candidate.id === record.id);
-
-    if (index >= 0) {
-      state.distributedRecords[index] = clone(record);
-    } else {
-      state.distributedRecords.push(clone(record));
-    }
-
+    upsertBy(this.requireState().distributedRecords, record, (candidate) => candidate.id === record.id);
     await this.persist();
   }
 
@@ -390,15 +297,7 @@ export class FileDisproStore implements DisproStore {
 
   async saveUserTransaction(transaction: UserTransaction): Promise<void> {
     await this.ensureLoaded();
-    const state = this.requireState();
-    const index = state.userTransactions.findIndex((candidate) => candidate.id === transaction.id);
-
-    if (index >= 0) {
-      state.userTransactions[index] = clone(transaction);
-    } else {
-      state.userTransactions.push(clone(transaction));
-    }
-
+    upsertBy(this.requireState().userTransactions, transaction, (candidate) => candidate.id === transaction.id);
     await this.persist();
   }
 
@@ -414,19 +313,25 @@ export class FileDisproStore implements DisproStore {
   }
 
   private async load(seedNodes: readonly NodeProfile[]): Promise<void> {
-    try {
-      const raw = await readFile(this.filePath, "utf8");
-      this.state = normalizeState(JSON.parse(raw));
-    } catch (error) {
-      if (!isNotFoundError(error)) {
-        throw error;
-      }
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS dispro_state (
+        id TEXT PRIMARY KEY,
+        state JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
 
+    const rows = (await this.sql`
+      SELECT state FROM dispro_state WHERE id = ${this.stateKey} LIMIT 1
+    `) as Array<{ state: unknown }>;
+
+    if (rows.length === 0) {
       this.state = createEmptyState(seedNodes);
       await this.persist();
       return;
     }
 
+    this.state = normalizeState(rows[0]?.state);
     if (this.state.nodes.length === 0 && seedNodes.length > 0) {
       this.state.nodes = clone([...seedNodes]);
       await this.persist();
@@ -441,7 +346,7 @@ export class FileDisproStore implements DisproStore {
 
   private requireState(): PersistedState {
     if (!this.state) {
-      throw new Error("FileDisproStore has not been loaded.");
+      throw new Error("NeonDisproStore has not been loaded.");
     }
 
     return this.state;
@@ -450,11 +355,12 @@ export class FileDisproStore implements DisproStore {
   private async persist(): Promise<void> {
     const state = this.requireState();
     state.updatedAt = new Date().toISOString();
-    await mkdir(dirname(this.filePath), { recursive: true });
-
-    const temporaryPath = `${this.filePath}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-    await rename(temporaryPath, this.filePath);
+    await this.sql`
+      INSERT INTO dispro_state (id, state, updated_at)
+      VALUES (${this.stateKey}, ${JSON.stringify(state)}::jsonb, now())
+      ON CONFLICT (id)
+      DO UPDATE SET state = EXCLUDED.state, updated_at = EXCLUDED.updated_at
+    `;
   }
 }
 
@@ -480,64 +386,55 @@ function createEmptyState(seedNodes: readonly NodeProfile[]): PersistedState {
 
 function normalizeState(value: unknown): PersistedState {
   if (!isRecord(value)) {
-    throw new Error("Persisted Dispro state must be an object.");
+    return createEmptyState([]);
   }
-
-  const orders = Array.isArray(value.orders) ? (value.orders as PlannedOrder[]) : [];
-  const nodes = Array.isArray(value.nodes) ? (value.nodes as NodeProfile[]) : [];
-  const users = Array.isArray(value.users) ? (value.users as UserAccount[]) : [];
-  const emailChallenges = Array.isArray(value.emailChallenges)
-    ? (value.emailChallenges as EmailSignInChallenge[])
-    : [];
-  const sessions = Array.isArray(value.sessions) ? (value.sessions as UserSession[]) : [];
-  const apiKeys = Array.isArray(value.apiKeys)
-    ? (value.apiKeys as UserApiKey[]).map((apiKey) => ({
-        ...apiKey,
-        purpose: apiKey.purpose ?? "general"
-      }))
-    : [];
-  const processNodes = Array.isArray(value.processNodes) ? (value.processNodes as ProcessNodeRecord[]) : [];
-  const processJobs = Array.isArray(value.processJobs) ? (value.processJobs as ProcessJob[]) : [];
-  const processJobResults = Array.isArray(value.processJobResults)
-    ? (value.processJobResults as ProcessJobResult[])
-    : [];
-  const useOrders = Array.isArray(value.useOrders) ? (value.useOrders as UseOrderRecord[]) : [];
-  const billingCustomers = Array.isArray(value.billingCustomers)
-    ? (value.billingCustomers as BillingCustomer[])
-    : [];
-  const distributedRecords = Array.isArray(value.distributedRecords)
-    ? (value.distributedRecords as DistributedRecord[])
-    : [];
-  const userTransactions = Array.isArray(value.userTransactions)
-    ? (value.userTransactions as UserTransaction[])
-    : [];
-  const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString();
 
   return {
     version: 1,
-    updatedAt,
-    orders,
-    nodes,
-    users,
-    emailChallenges,
-    sessions,
-    apiKeys,
-    processNodes,
-    processJobs,
-    processJobResults,
-    useOrders,
-    billingCustomers,
-    distributedRecords,
-    userTransactions
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
+    orders: Array.isArray(value.orders) ? (value.orders as PlannedOrder[]) : [],
+    nodes: Array.isArray(value.nodes) ? (value.nodes as NodeProfile[]) : [],
+    users: Array.isArray(value.users) ? (value.users as UserAccount[]) : [],
+    emailChallenges: Array.isArray(value.emailChallenges)
+      ? (value.emailChallenges as EmailSignInChallenge[])
+      : [],
+    sessions: Array.isArray(value.sessions) ? (value.sessions as UserSession[]) : [],
+    apiKeys: Array.isArray(value.apiKeys)
+      ? (value.apiKeys as UserApiKey[]).map((apiKey) => ({
+          ...apiKey,
+          purpose: apiKey.purpose ?? "general"
+        }))
+      : [],
+    processNodes: Array.isArray(value.processNodes) ? (value.processNodes as ProcessNodeRecord[]) : [],
+    processJobs: Array.isArray(value.processJobs) ? (value.processJobs as ProcessJob[]) : [],
+    processJobResults: Array.isArray(value.processJobResults)
+      ? (value.processJobResults as ProcessJobResult[])
+      : [],
+    useOrders: Array.isArray(value.useOrders) ? (value.useOrders as UseOrderRecord[]) : [],
+    billingCustomers: Array.isArray(value.billingCustomers)
+      ? (value.billingCustomers as BillingCustomer[])
+      : [],
+    distributedRecords: Array.isArray(value.distributedRecords)
+      ? (value.distributedRecords as DistributedRecord[])
+      : [],
+    userTransactions: Array.isArray(value.userTransactions)
+      ? (value.userTransactions as UserTransaction[])
+      : []
   };
+}
+
+function upsertBy<T>(items: T[], value: T, predicate: (candidate: T) => boolean): void {
+  const index = items.findIndex(predicate);
+  if (index >= 0) {
+    items[index] = clone(value);
+    return;
+  }
+
+  items.push(clone(value));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return isRecord(error) && error.code === "ENOENT";
 }
 
 function clone<T>(value: T): T {

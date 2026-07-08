@@ -1,4 +1,5 @@
 import type {
+  BillingCustomer,
   DistributedRecord,
   EmailSignInChallenge,
   NodeProfile,
@@ -6,6 +7,7 @@ import type {
   ProcessJob,
   ProcessJobResult,
   ProcessNodeRecord,
+  UseOrderRecord,
   UserTransaction,
   UserAccount,
   UserApiKey,
@@ -55,7 +57,14 @@ export interface DisproStore {
   getProcessJob(jobId: string): Promise<ProcessJob | undefined>;
   listProcessJobs(): Promise<ProcessJob[]>;
   saveProcessJobResult(result: ProcessJobResult): Promise<void>;
+  listProcessJobResults(): Promise<ProcessJobResult[]>;
   listProcessJobResultsForUser(userId: string): Promise<ProcessJobResult[]>;
+  saveUseOrder(order: UseOrderRecord): Promise<void>;
+  getUseOrder(orderId: string): Promise<UseOrderRecord | undefined>;
+  listUseOrdersForUser(userId: string): Promise<UseOrderRecord[]>;
+  saveBillingCustomer(customer: BillingCustomer): Promise<void>;
+  getBillingCustomerByUserId(userId: string): Promise<BillingCustomer | undefined>;
+  getBillingCustomerByStripeCustomerId(stripeCustomerId: string): Promise<BillingCustomer | undefined>;
   saveDistributedRecord(record: DistributedRecord): Promise<void>;
   listDistributedRecordsForUser(userId: string): Promise<DistributedRecord[]>;
   getDistributedRecord(recordId: string): Promise<DistributedRecord | undefined>;

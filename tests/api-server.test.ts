@@ -563,6 +563,173 @@ test("anchors user profile and process earning transactions through signed speci
   }
 });
 
+test("creates Use API keys, requires billing setup, finalizes metered results, and records mock Stripe payment", async () => {
+  const previousMock = process.env.DISPRO_STRIPE_MOCK;
+  const previousPublishable = process.env.STRIPE_PUBLISHABLE_KEY;
+  process.env.DISPRO_STRIPE_MOCK = "true";
+  process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_mock";
+  const { baseUrl, close, store } = await createTestApi();
+
+  try {
+    const sessionToken = await signInAndGetSessionToken(baseUrl, "use-owner@example.com");
+    const useApiKeyResponse = await fetch(`${baseUrl}/auth/api-keys`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ label: "use-windows-v1", purpose: "use" })
+    });
+    assert.equal(useApiKeyResponse.status, 201);
+    const useApiKeyBody = (await useApiKeyResponse.json()) as { secret: string; apiKey: { purpose: string } };
+    assert.equal(useApiKeyBody.apiKey.purpose, "use");
+
+    const rejectedOrderResponse = await fetch(`${baseUrl}/use/orders`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        source: {
+          kind: "url",
+          uri: "https://example.test/input.txt",
+          byteSize: 1024,
+          contentHash: "use-order-content-hash"
+        },
+        workload: "hash.compute"
+      })
+    });
+    assert.equal(rejectedOrderResponse.status, 402);
+
+    const setupResponse = await fetch(`${baseUrl}/billing/setup-session`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(setupResponse.status, 201);
+
+    const billingStatusResponse = await fetch(`${baseUrl}/billing/status`, {
+      headers: {
+        authorization: `Bearer ${sessionToken}`
+      }
+    });
+    assert.equal(billingStatusResponse.status, 200);
+    const billingStatus = (await billingStatusResponse.json()) as { setupComplete: boolean };
+    assert.equal(billingStatus.setupComplete, true);
+
+    const createOrderResponse = await fetch(`${baseUrl}/use/orders?seed=use-order-seed`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        id: "use_order_001",
+        source: {
+          kind: "url",
+          uri: "https://example.test/input.txt",
+          byteSize: 1024,
+          contentHash: "use-order-content-hash"
+        },
+        workload: "hash.compute",
+        maxChargeMicroYen: 100_000_000
+      })
+    });
+    assert.equal(createOrderResponse.status, 201);
+    const created = (await createOrderResponse.json()) as { order: { id: string; estimatedMicroYen: number } };
+    assert.equal(created.order.id, "use_order_001");
+    assert.ok(created.order.estimatedMicroYen > 0);
+
+    const processJobs = (await store.listProcessJobs()).filter((job) => job.orderId === "use_order_001");
+    assert.ok(processJobs.length > 0);
+    for (const job of processJobs) {
+      await store.saveProcessJob({
+        ...job,
+        status: "completed",
+        updatedAt: "2026-07-04T00:00:01.000Z"
+      });
+      await store.saveProcessJobResult({
+        id: `result-${job.id}`,
+        jobId: job.id,
+        processNodeId: "test-node",
+        userId: "processor-user",
+        status: "completed",
+        resultHash: `hash-${job.id}`,
+        stdout: JSON.stringify({ ok: true, jobId: job.id }),
+        stderr: "",
+        durationMs: 25,
+        metrics: {
+          durationMs: 25,
+          inputBytes: typeof job.inputRef.sourceHash === "string" ? job.inputRef.sourceHash.length : 16,
+          outputBytes: 64,
+          computeUnits: 3000,
+          runnerWorkUnits: 3000
+        },
+        createdAt: "2026-07-04T00:00:01.000Z"
+      });
+    }
+
+    const finalizedResponse = await fetch(`${baseUrl}/use/orders/use_order_001`, {
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`
+      }
+    });
+    assert.equal(finalizedResponse.status, 200);
+    const finalized = (await finalizedResponse.json()) as {
+      order: { status: string; billingStatus: string; result?: unknown; finalMicroYen?: number; stripePaymentIntentId?: string };
+    };
+    assert.equal(finalized.order.status, "paid");
+    assert.equal(finalized.order.billingStatus, "paid");
+    assert.ok(finalized.order.result);
+    assert.ok(finalized.order.finalMicroYen);
+    assert.ok(finalized.order.stripePaymentIntentId?.startsWith("pi_mock_"));
+
+    const resultResponse = await fetch(`${baseUrl}/use/orders/use_order_001/result`, {
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`
+      }
+    });
+    assert.equal(resultResponse.status, 200);
+
+    const transactionsResponse = await fetch(`${baseUrl}/account/transactions`, {
+      headers: {
+        authorization: `Bearer ${sessionToken}`
+      }
+    });
+    const transactions = (await transactionsResponse.json()) as {
+      transactions: Array<{ kind: string; relatedOrderId?: string }>;
+    };
+    assert.equal(
+      transactions.transactions.some(
+        (transaction) => transaction.kind === "usage_charge" && transaction.relatedOrderId === "use_order_001"
+      ),
+      true
+    );
+    assert.equal(
+      transactions.transactions.some(
+        (transaction) => transaction.kind === "stripe_payment" && transaction.relatedOrderId === "use_order_001"
+      ),
+      true
+    );
+  } finally {
+    if (previousMock === undefined) {
+      delete process.env.DISPRO_STRIPE_MOCK;
+    } else {
+      process.env.DISPRO_STRIPE_MOCK = previousMock;
+    }
+    if (previousPublishable === undefined) {
+      delete process.env.STRIPE_PUBLISHABLE_KEY;
+    } else {
+      process.env.STRIPE_PUBLISHABLE_KEY = previousPublishable;
+    }
+    await close();
+  }
+});
+
 test("rejects protected order APIs without bearer authentication", async () => {
   const { baseUrl, close } = await createTestApi();
 

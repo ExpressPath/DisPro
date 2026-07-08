@@ -18,14 +18,14 @@
         </div>
 
         <div class="mode-row">
-          <button class="mode active" type="button">Earn - Process</button>
-          <button class="mode disabled" type="button" disabled>Use - coming later</button>
+          <button id="process-mode-button" class="mode active" type="button">Earn - Process</button>
+          <button id="use-mode-button" class="mode" type="button">Use</button>
         </div>
 
         <form id="login-form" class="stack">
           <label>
             API Base URL
-            <input id="api-base-url" type="url" value="http://localhost:8787" required />
+            <input id="api-base-url" type="url" value="https://dis-pro-liart.vercel.app" required />
           </label>
           <label>
             Email address
@@ -39,31 +39,91 @@
             Email verification code
             <input id="verification-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required />
           </label>
-          <button type="submit">Verify and create Process API key</button>
+          <button type="submit">Verify and create API keys</button>
         </form>
 
-        <section class="status-grid">
-          <div>
-            <span>Status</span>
-            <strong id="status-mode">stopped</strong>
+        <section id="process-section">
+          <section class="status-grid">
+            <div>
+              <span>Status</span>
+              <strong id="status-mode">stopped</strong>
+            </div>
+            <div>
+              <span>Processed</span>
+              <strong id="processed-count">0</strong>
+            </div>
+            <div>
+              <span>Failed</span>
+              <strong id="failed-count">0</strong>
+            </div>
+            <div>
+              <span>Provisional</span>
+              <strong id="earnings">0 JPY</strong>
+            </div>
+          </section>
+
+          <div class="actions">
+            <button id="start-button" type="button">Start Processing</button>
+            <button id="stop-button" type="button">Stop</button>
           </div>
-          <div>
-            <span>Processed</span>
-            <strong id="processed-count">0</strong>
+        </section>
+
+        <section id="use-section" class="hidden">
+          <section class="status-grid">
+            <div>
+              <span>Billing</span>
+              <strong id="billing-status">unknown</strong>
+            </div>
+            <div>
+              <span>Order</span>
+              <strong id="use-order-status">none</strong>
+            </div>
+            <div>
+              <span>Estimate</span>
+              <strong id="use-estimate">0 JPY</strong>
+            </div>
+            <div>
+              <span>Final</span>
+              <strong id="use-final">0 JPY</strong>
+            </div>
+          </section>
+
+          <div class="actions">
+            <button id="billing-status-button" type="button">Refresh Billing</button>
+            <button id="billing-setup-button" type="button">Register Payment Method</button>
           </div>
-          <div>
-            <span>Failed</span>
-            <strong id="failed-count">0</strong>
-          </div>
-          <div>
-            <span>Provisional</span>
-            <strong id="earnings">0 JPY</strong>
+
+          <form id="use-order-form" class="stack">
+            <label>
+              Source URL or CID
+              <input id="use-source-uri" type="text" placeholder="https://example.com/input.json" required />
+            </label>
+            <label>
+              Content hash
+              <input id="use-content-hash" type="text" placeholder="sha256..." required />
+            </label>
+            <label>
+              Byte size
+              <input id="use-byte-size" type="number" min="1" value="1024" required />
+            </label>
+            <label>
+              Workload
+              <input id="use-workload" type="text" value="hash.compute" required />
+            </label>
+            <label>
+              Max charge micro-yen
+              <input id="use-max-charge" type="number" min="1" placeholder="optional" />
+            </label>
+            <button type="submit">Create Use Order</button>
+          </form>
+
+          <div class="actions">
+            <button id="use-refresh-order-button" type="button">Refresh Order</button>
+            <button id="use-result-button" type="button">Get Result</button>
           </div>
         </section>
 
         <div class="actions">
-          <button id="start-button" type="button">Start Processing</button>
-          <button id="stop-button" type="button">Stop</button>
           <button id="clear-auth-button" type="button">Clear sign-in</button>
         </div>
 

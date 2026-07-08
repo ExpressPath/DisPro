@@ -12,10 +12,18 @@ export {
 } from "./services/authService.js";
 export { planOrder } from "./services/orderOrchestrator.js";
 export {
+  chargeSavedPaymentMethod,
+  createBillingSetupSession,
+  getBillingStatus,
+  handleStripeWebhook
+} from "./services/billingService.js";
+export {
   DEFAULT_PROCESS_JOB_PUBLIC_KEY,
   calculateProcessEarnings,
+  enqueueDistributedRecordAnchorJob,
   createProcessJobFromTask,
   createSpecialProcessJob,
+  enqueueTransactionAnchorJob,
   getProcessJobPublicKey,
   leaseProcessJob,
   registerProcessNode,
@@ -23,11 +31,14 @@ export {
   submitProcessResult,
   verifyProcessJobEnvelope
 } from "./services/processService.js";
+export { createUseOrder, getUseOrder, getUseOrderResult, listUseOrders } from "./services/useOrderService.js";
 export { FileDisproStore } from "./storage/fileDisproStore.js";
+export { NeonDisproStore } from "./storage/neonDisproStore.js";
 export { summarizeOrder } from "./storage/disproStore.js";
 export type { DisproStore, OrderSummary } from "./storage/disproStore.js";
 export type {
   AuditEvent,
+  BillingCustomer,
   DeviceClass,
   DistributedRecord,
   DistributedRecordType,
@@ -46,12 +57,15 @@ export type {
   ProcessNodeInfo,
   ProcessNodeMode,
   ProcessNodeRecord,
+  ProcessResultMetrics,
   SignedProcessJobEnvelope,
   TaskAssignment,
   TaskKind,
   TaskSpec,
   UserAccount,
   UserApiKey,
+  UseOrderRecord,
+  UseOrderStatus,
   UserTransaction,
   UserSession,
   VerificationLevel,

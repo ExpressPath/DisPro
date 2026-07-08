@@ -72,3 +72,23 @@ ipcMain.handle("process:stop", async () => {
 ipcMain.handle("process:status", async () => {
   return controller.getStatus();
 });
+
+ipcMain.handle("billing:status", async (_event, setupSessionId) => {
+  return controller.getBillingStatus(setupSessionId);
+});
+
+ipcMain.handle("billing:setup", async () => {
+  return controller.startBillingSetup();
+});
+
+ipcMain.handle("use:create-order", async (_event, input) => {
+  return controller.createUseOrder(input);
+});
+
+ipcMain.handle("use:get-order", async (_event, orderId) => {
+  return controller.getUseOrder(orderId);
+});
+
+ipcMain.handle("use:get-result", async (_event, orderId) => {
+  return controller.getUseOrderResult(orderId);
+});

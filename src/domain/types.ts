@@ -265,7 +265,7 @@ export interface UserApiKey {
   id: string;
   userId: string;
   label: string;
-  purpose: "general" | "process";
+  purpose: "general" | "process" | "use";
   keyPrefix: string;
   keyHash: string;
   createdAt: string;
@@ -273,11 +273,27 @@ export interface UserApiKey {
   revokedAt?: string;
 }
 
+export interface BillingCustomer {
+  userId: string;
+  stripeCustomerId: string;
+  defaultPaymentMethodId?: string;
+  setupComplete: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ProcessNodeMode = "idle" | "waiting" | "running" | "stopped" | "error";
 export type ProcessJobStatus = "queued" | "leased" | "running" | "completed" | "failed" | "rejected";
 export type ProcessPaymentMode = "internal" | "external" | "smart_contract";
 export type ProcessResultStatus = "completed" | "failed" | "rejected";
-export type DistributedRecordType = "user.profile" | "transaction" | "process.result" | "app.update";
+export type DistributedRecordType =
+  | "user.profile"
+  | "transaction"
+  | "process.result"
+  | "app.update"
+  | "order.contract"
+  | "order.result"
+  | "billing.charge";
 export type DistributedStorageProvider = "ipfs" | "filecoin" | "arweave" | "local";
 
 export interface ProcessNodeInfo {
@@ -352,8 +368,17 @@ export interface ProcessJobResult {
   stdout: string;
   stderr: string;
   durationMs: number;
+  metrics?: ProcessResultMetrics;
   errorMessage?: string;
   createdAt: string;
+}
+
+export interface ProcessResultMetrics {
+  durationMs: number;
+  inputBytes?: number;
+  outputBytes?: number;
+  computeUnits?: number;
+  runnerWorkUnits?: number;
 }
 
 export interface ProcessEarnings {
@@ -382,12 +407,60 @@ export interface DistributedRecord {
 export interface UserTransaction {
   id: string;
   userId: string;
-  kind: "provisional_earning" | "confirmed_earning" | "external_payment" | "smart_contract_payment";
+  kind:
+    | "provisional_earning"
+    | "confirmed_earning"
+    | "external_payment"
+    | "smart_contract_payment"
+    | "usage_charge"
+    | "stripe_payment"
+    | "stripe_payment_failed";
   amountMicroYen: number;
   currency: "JPY_MICRO" | "USDC" | "ETH";
   status: "pending" | "anchored" | "failed" | "settled";
   relatedJobId?: string;
+  relatedOrderId?: string;
+  stripePaymentIntentId?: string;
   distributedRecordId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type UseOrderStatus =
+  | "queued"
+  | "processing"
+  | "completed"
+  | "paid"
+  | "payment_pending"
+  | "payment_failed"
+  | "failed";
+
+export type UseOrderBillingStatus = "requires_payment_method" | "pending" | "held" | "paid" | "failed";
+
+export interface UseOrderResultRef {
+  resultHash: string;
+  resultUrl?: string;
+  resultCid?: string;
+  outputBytes?: number;
+  completedAt: string;
+}
+
+export interface UseOrderRecord {
+  id: string;
+  userId: string;
+  plannedOrderId: string;
+  status: UseOrderStatus;
+  billingStatus: UseOrderBillingStatus;
+  estimatedMicroYen: number;
+  maxChargeMicroYen: number;
+  finalMicroYen?: number;
+  billedMicroYen?: number;
+  stripePaymentIntentId?: string;
+  contractHash: string;
+  cid: string;
+  metrics: ProcessResultMetrics;
+  result?: UseOrderResultRef;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
 }

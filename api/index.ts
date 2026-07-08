@@ -5,9 +5,13 @@ import { createDisproHttpRequestHandler } from "../src/api/httpServer.js";
 import { sampleNodes } from "../src/sample/sampleNodes.js";
 import { createMailerFromEnv } from "../src/services/authService.js";
 import { FileDisproStore } from "../src/storage/fileDisproStore.js";
+import { NeonDisproStore } from "../src/storage/neonDisproStore.js";
 
 const dataPath = process.env.DISPRO_DATA_PATH ?? join(tmpdir(), "dispro-vercel-state.json");
-const storePromise = FileDisproStore.open(dataPath, sampleNodes);
+const storePromise =
+  process.env.DATABASE_URL === undefined
+    ? FileDisproStore.open(dataPath, sampleNodes)
+    : NeonDisproStore.open(process.env.DATABASE_URL, sampleNodes);
 
 export default async function handler(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const store = await storePromise;

@@ -24,6 +24,14 @@
       "dest": "/api/index.ts"
     },
     {
+      "src": "/billing/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/use/(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
       "src": "/nodes(.*)",
       "dest": "/api/index.ts"
     },

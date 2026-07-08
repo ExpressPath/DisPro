@@ -1,4 +1,5 @@
 import { cpus, hostname, platform, release, totalmem } from "node:os";
+import { shell } from "electron";
 import { executeSignedProcessJob, supportedWorkloads } from "../worker/runners.mjs";
 
 const APP_VERSION = "0.1.0";
@@ -39,7 +40,8 @@ export class ProcessController {
     return {
       signedIn: true,
       user: me.user,
-      apiBaseUrl: auth.apiBaseUrl
+      apiBaseUrl: auth.apiBaseUrl,
+      hasUseApiKey: Boolean(auth.useApiKey)
     };
   }
 
@@ -83,11 +85,24 @@ export class ProcessController {
     if (!processApiKey) {
       throw new Error("Existing process API keys cannot be recovered. Revoke the old key and create a new one.");
     }
+    const useApiKey =
+      input.existingUseApiKey ??
+      (
+        await apiFetch(apiBaseUrl, "/auth/api-keys", {
+          method: "POST",
+          token: session.sessionToken,
+          body: {
+            label: "use-windows-v1",
+            purpose: "use"
+          }
+        })
+      ).secret;
 
     this.auth = {
       apiBaseUrl,
       sessionToken: session.sessionToken,
-      processApiKey
+      processApiKey,
+      useApiKey
     };
     await this.credentials.saveAuth(this.auth);
     this.status.connected = true;
@@ -159,6 +174,81 @@ export class ProcessController {
 
   getStatus() {
     return this.status;
+  }
+
+  async getBillingStatus(setupSessionId) {
+    await this.ensureSignedIn();
+    const query = setupSessionId ? `?setup_session_id=${encodeURIComponent(setupSessionId)}` : "";
+    return apiFetch(this.auth.apiBaseUrl, `/billing/status${query}`, {
+      token: this.auth.sessionToken
+    });
+  }
+
+  async startBillingSetup() {
+    await this.ensureSignedIn();
+    const response = await apiFetch(this.auth.apiBaseUrl, "/billing/setup-session", {
+      method: "POST",
+      token: this.auth.sessionToken,
+      body: {}
+    });
+    if (response.url) {
+      await shell.openExternal(response.url);
+    }
+    return response;
+  }
+
+  async createUseOrder(input) {
+    await this.ensureUseApiKey();
+    return apiFetch(this.auth.apiBaseUrl, "/use/orders", {
+      method: "POST",
+      token: this.auth.useApiKey,
+      body: normalizeUseOrderInput(input)
+    });
+  }
+
+  async getUseOrder(orderId) {
+    await this.ensureUseApiKey();
+    return apiFetch(this.auth.apiBaseUrl, `/use/orders/${encodeURIComponent(orderId)}`, {
+      token: this.auth.useApiKey
+    });
+  }
+
+  async getUseOrderResult(orderId) {
+    await this.ensureUseApiKey();
+    return apiFetch(this.auth.apiBaseUrl, `/use/orders/${encodeURIComponent(orderId)}/result`, {
+      token: this.auth.useApiKey
+    });
+  }
+
+  async ensureSignedIn() {
+    if (!this.auth) {
+      await this.loadStoredAuth();
+    }
+    if (!this.auth) {
+      throw new Error("Sign in before using Dispro.");
+    }
+  }
+
+  async ensureUseApiKey() {
+    await this.ensureSignedIn();
+    if (this.auth.useApiKey) {
+      return this.auth.useApiKey;
+    }
+
+    const created = await apiFetch(this.auth.apiBaseUrl, "/auth/api-keys", {
+      method: "POST",
+      token: this.auth.sessionToken,
+      body: {
+        label: "use-windows-v1",
+        purpose: "use"
+      }
+    });
+    this.auth = {
+      ...this.auth,
+      useApiKey: created.secret
+    };
+    await this.credentials.saveAuth(this.auth);
+    return created.secret;
   }
 
   async registerNode() {
@@ -240,6 +330,7 @@ export class ProcessController {
         stdout: execution.stdout,
         stderr: execution.stderr,
         durationMs: Date.now() - startedAt,
+        metrics: execution.metrics,
         errorMessage: execution.errorMessage
       }
     });
@@ -330,6 +421,48 @@ function normalizeVerificationCode(value) {
     throw new Error("Enter the 6-digit email verification code.");
   }
   return raw;
+}
+
+function normalizeUseOrderInput(input) {
+  const sourceKind = String(input.sourceKind ?? "url").trim();
+  const sourceUri = String(input.sourceUri ?? "").trim();
+  const contentHash = String(input.contentHash ?? "").trim();
+  const workload = String(input.workload ?? "hash.compute").trim();
+  const byteSize = Number.parseInt(String(input.byteSize ?? "0"), 10);
+  const maxChargeMicroYen = Number.parseInt(String(input.maxChargeMicroYen ?? "0"), 10);
+
+  if (!["file", "folder", "url", "code", "proof"].includes(sourceKind)) {
+    throw new Error("Source kind must be file, folder, url, code, or proof.");
+  }
+  if (!sourceUri) {
+    throw new Error("Source URL or CID is required.");
+  }
+  if (!Number.isFinite(byteSize) || byteSize <= 0) {
+    throw new Error("Byte size must be greater than zero.");
+  }
+  if (!contentHash || contentHash.length < 8) {
+    throw new Error("Content hash is required.");
+  }
+  if (!workload) {
+    throw new Error("Workload is required.");
+  }
+
+  const order = {
+    source: {
+      kind: sourceKind,
+      uri: sourceUri,
+      byteSize,
+      contentHash
+    },
+    workload,
+    priority: input.priority ?? "standard",
+    verificationLevel: input.verificationLevel ?? "standard"
+  };
+
+  if (maxChargeMicroYen > 0) {
+    order.maxChargeMicroYen = maxChargeMicroYen;
+  }
+  return order;
 }
 
 function parseJsonObject(value) {
