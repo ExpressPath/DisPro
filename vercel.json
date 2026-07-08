@@ -1,6 +1,5 @@
 {
-  "buildCommand": "npm run build:vercel",
-  "outputDirectory": "dist/site",
+  "buildCommand": "npm run build",
   "installCommand": "npm install",
   "functions": {
     "api/index.ts": {
