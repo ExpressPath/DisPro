@@ -33,10 +33,20 @@ export class ProcessController {
     if (!auth) {
       return { signedIn: false };
     }
+    let me;
+    try {
+      me = await apiFetch(auth.apiBaseUrl, "/auth/me", {
+        token: auth.processApiKey
+      });
+    } catch (error) {
+      await this.credentials.clearAuth();
+      this.auth = undefined;
+      this.status.connected = false;
+      this.status.message = "Stored sign-in is invalid. Verify your email again.";
+      this.emit();
+      return { signedIn: false };
+    }
     this.auth = auth;
-    const me = await apiFetch(auth.apiBaseUrl, "/auth/me", {
-      token: auth.processApiKey
-    });
     this.status.connected = true;
     this.status.message = `Signed in as ${me.user.email}`;
     this.emit();

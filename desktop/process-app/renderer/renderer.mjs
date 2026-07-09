@@ -11,12 +11,16 @@ const processModeButton = document.querySelector("#process-mode-button");
 const useModeButton = document.querySelector("#use-mode-button");
 const processSection = document.querySelector("#process-section");
 const useSection = document.querySelector("#use-section");
+const authLockMessage = document.querySelector("#auth-lock-message");
 const billingStatusButton = document.querySelector("#billing-status-button");
 const billingSetupButton = document.querySelector("#billing-setup-button");
 const useOrderForm = document.querySelector("#use-order-form");
 const useRefreshOrderButton = document.querySelector("#use-refresh-order-button");
 const useResultButton = document.querySelector("#use-result-button");
 let currentUseOrderId;
+let emailVerified = false;
+
+setEmailVerified(false);
 
 window.dispro.process.onStatus(renderStatus);
 
@@ -25,11 +29,17 @@ window.dispro.auth
   .then((result) => {
     if (result.signedIn) {
       apiBaseUrl.value = result.apiBaseUrl;
+      setEmailVerified(true);
       appendLog(`Signed in as ${result.user.email}`);
       refreshBillingStatus().catch((error) => appendLog(error.message));
+    } else {
+      setEmailVerified(false);
     }
   })
-  .catch((error) => appendLog(error.message));
+  .catch((error) => {
+    setEmailVerified(false);
+    appendLog(error.message);
+  });
 
 processModeButton.addEventListener("click", () => setMode("process"));
 useModeButton.addEventListener("click", () => setMode("use"));
@@ -41,6 +51,7 @@ loginForm.addEventListener("submit", async (event) => {
       apiBaseUrl: apiBaseUrl.value,
       email: email.value
     });
+    setEmailVerified(false);
     verifyForm.classList.remove("hidden");
     if (result.devVerificationCode) {
       verificationCode.value = result.devVerificationCode;
@@ -61,6 +72,7 @@ verifyForm.addEventListener("submit", async (event) => {
       email: email.value,
       code: verificationCode.value
     });
+    setEmailVerified(true);
     appendLog(`Verified ${result.user.email}. Process API key is ready.`);
     await refreshBillingStatus();
   } catch (error) {
@@ -70,6 +82,7 @@ verifyForm.addEventListener("submit", async (event) => {
 
 startButton.addEventListener("click", async () => {
   try {
+    requireEmailVerified();
     await window.dispro.process.start();
   } catch (error) {
     appendLog(error.message);
@@ -78,6 +91,7 @@ startButton.addEventListener("click", async () => {
 
 stopButton.addEventListener("click", async () => {
   try {
+    requireEmailVerified();
     await window.dispro.process.stop();
   } catch (error) {
     appendLog(error.message);
@@ -87,6 +101,7 @@ stopButton.addEventListener("click", async () => {
 clearAuthButton.addEventListener("click", async () => {
   try {
     await window.dispro.auth.clear();
+    setEmailVerified(false);
     appendLog("Stored sign-in cleared. Sign in again to create a fresh Process API key.");
   } catch (error) {
     appendLog(error.message);
@@ -95,6 +110,7 @@ clearAuthButton.addEventListener("click", async () => {
 
 billingStatusButton.addEventListener("click", async () => {
   try {
+    requireEmailVerified();
     await refreshBillingStatus();
   } catch (error) {
     appendLog(error.message);
@@ -103,6 +119,7 @@ billingStatusButton.addEventListener("click", async () => {
 
 billingSetupButton.addEventListener("click", async () => {
   try {
+    requireEmailVerified();
     const result = await window.dispro.billing.setup();
     appendLog(result.url ? "Payment setup opened in your browser." : "Payment setup is ready.");
     await refreshBillingStatus();
@@ -114,6 +131,7 @@ billingSetupButton.addEventListener("click", async () => {
 useOrderForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
+    requireEmailVerified();
     const result = await window.dispro.use.createOrder({
       sourceKind: "url",
       sourceUri: document.querySelector("#use-source-uri").value,
@@ -134,6 +152,7 @@ useOrderForm.addEventListener("submit", async (event) => {
 
 useRefreshOrderButton.addEventListener("click", async () => {
   try {
+    requireEmailVerified();
     await refreshUseOrder();
   } catch (error) {
     appendLog(error.message);
@@ -142,6 +161,7 @@ useRefreshOrderButton.addEventListener("click", async () => {
 
 useResultButton.addEventListener("click", async () => {
   try {
+    requireEmailVerified();
     if (!currentUseOrderId) {
       throw new Error("Create or refresh an order first.");
     }
@@ -154,11 +174,47 @@ useResultButton.addEventListener("click", async () => {
 });
 
 function setMode(mode) {
+  if (!emailVerified) {
+    appendLog("Verify your email before switching modes or using Dispro actions.");
+    mode = "process";
+  }
   const useMode = mode === "use";
   useSection.classList.toggle("hidden", !useMode);
   processSection.classList.toggle("hidden", useMode);
   useModeButton.classList.toggle("active", useMode);
   processModeButton.classList.toggle("active", !useMode);
+}
+
+function setEmailVerified(value) {
+  emailVerified = Boolean(value);
+  const locked = !emailVerified;
+  for (const element of [
+    processModeButton,
+    useModeButton,
+    startButton,
+    stopButton,
+    billingStatusButton,
+    billingSetupButton,
+    useRefreshOrderButton,
+    useResultButton,
+    ...useOrderForm.querySelectorAll("input, button")
+  ]) {
+    element.disabled = locked;
+  }
+  authLockMessage.classList.toggle("hidden", !locked);
+  processSection.classList.toggle("locked", locked);
+  useSection.classList.toggle("locked", locked);
+  if (locked) {
+    setMode("process");
+    document.querySelector("#status-mode").textContent = "locked";
+    document.querySelector("#billing-status").textContent = "locked";
+  }
+}
+
+function requireEmailVerified() {
+  if (!emailVerified) {
+    throw new Error("Email verification is required before using Process, Use, billing, or order actions.");
+  }
 }
 
 function renderStatus(status) {
