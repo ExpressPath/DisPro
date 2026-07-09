@@ -1,7 +1,9 @@
 import type {
   BillingCustomer,
+  ConsensusRecord,
   DistributedRecord,
   EmailSignInChallenge,
+  NodeCapabilitySnapshot,
   NodeProfile,
   PlannedOrder,
   ProcessJob,
@@ -11,7 +13,8 @@ import type {
   UserTransaction,
   UserAccount,
   UserApiKey,
-  UserSession
+  UserSession,
+  WorkUnit
 } from "../domain/types.js";
 
 export interface OrderSummary {
@@ -56,6 +59,14 @@ export interface DisproStore {
   saveProcessJob(job: ProcessJob): Promise<void>;
   getProcessJob(jobId: string): Promise<ProcessJob | undefined>;
   listProcessJobs(): Promise<ProcessJob[]>;
+  saveWorkUnit(workUnit: WorkUnit): Promise<void>;
+  getWorkUnit(workUnitId: string): Promise<WorkUnit | undefined>;
+  listWorkUnits(): Promise<WorkUnit[]>;
+  saveConsensusRecord(record: ConsensusRecord): Promise<void>;
+  getConsensusRecord(workUnitId: string): Promise<ConsensusRecord | undefined>;
+  listConsensusRecords(): Promise<ConsensusRecord[]>;
+  saveNodeCapabilitySnapshot(snapshot: NodeCapabilitySnapshot): Promise<void>;
+  listNodeCapabilitySnapshots(processNodeId?: string): Promise<NodeCapabilitySnapshot[]>;
   saveProcessJobResult(result: ProcessJobResult): Promise<void>;
   listProcessJobResults(): Promise<ProcessJobResult[]>;
   listProcessJobResultsForUser(userId: string): Promise<ProcessJobResult[]>;

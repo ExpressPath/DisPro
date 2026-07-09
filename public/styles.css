@@ -400,6 +400,105 @@ code {
   background: #ffffff;
 }
 
+.downloads-section {
+  background: #fbfbf8;
+  border-top: 1px solid var(--line);
+}
+
+.download-table-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.download-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+}
+
+.download-table th,
+.download-table td {
+  padding: 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.download-table th {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.download-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.account-section {
+  background: #eff2f6;
+  border-top: 1px solid var(--line);
+}
+
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(240px, 0.7fr) minmax(320px, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.account-panel {
+  display: grid;
+  gap: 14px;
+  min-height: 260px;
+  padding: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.account-panel label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.account-panel input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.profile-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.account-output {
+  min-height: 190px;
+  margin: 0;
+  overflow: auto;
+  padding: 16px;
+  color: #edf7ff;
+  background: #14171c;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.hidden {
+  display: none;
+}
+
 .lane {
   border-top: 4px solid var(--green);
 }
@@ -481,7 +580,8 @@ code {
 
   .feature-grid,
   .lane-grid,
-  .api-layout {
+  .api-layout,
+  .account-layout {
     grid-template-columns: 1fr;
   }
 

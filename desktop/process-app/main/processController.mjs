@@ -1,4 +1,5 @@
 import { cpus, hostname, platform, release, totalmem } from "node:os";
+import { createHash, generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { shell } from "electron";
 import { executeSignedProcessJob, supportedWorkloads } from "../worker/runners.mjs";
 
@@ -23,6 +24,8 @@ export class ProcessController {
     this.auth = undefined;
     this.node = undefined;
     this.publicKey = undefined;
+    this.resultKeyPair = generateKeyPairSync("ed25519");
+    this.benchmarkScores = runLightweightBenchmark();
   }
 
   async loadStoredAuth() {
@@ -262,7 +265,16 @@ export class ProcessController {
         appVersion: APP_VERSION,
         cpuCores: cpus().length,
         memoryGb: Math.round((totalmem() / 1024 ** 3) * 10) / 10,
-        supportedWorkloads
+        supportedWorkloads,
+        deviceClass: inferDeviceClass(),
+        benchmarkScores: this.benchmarkScores,
+        bandwidthMbps: 50,
+        thermalState: "nominal",
+        batteryState: "unknown",
+        maxConcurrentJobs: Math.max(1, Math.min(8, Math.floor(cpus().length / 2))),
+        runnerFamily: "electron-process-v1",
+        clusterWords: createClusterWords(),
+        nodePublicKey: this.resultKeyPair.publicKey.export({ type: "spki", format: "pem" })
       }
     });
     this.applyEarnings(response.earnings);
@@ -331,6 +343,7 @@ export class ProcessController {
         stderr: execution.stderr,
         durationMs: Date.now() - startedAt,
         metrics: execution.metrics,
+        ...this.createResultSignature(lease.job, execution),
         errorMessage: execution.errorMessage
       }
     });
@@ -340,6 +353,27 @@ export class ProcessController {
     this.status.message = statusMessage ?? `Submitted ${lease.job.jobId}`;
     this.emit();
     this.schedulePoll(500);
+  }
+
+  createResultSignature(job, execution) {
+    const resultNonce = `rnonce_${createHash("sha256")
+      .update(`${job.jobId}:${job.nonce}:${execution.resultHash}:${Date.now()}`)
+      .digest("hex")}`;
+    const payload = {
+      nodeId: this.node.id,
+      jobId: job.jobId,
+      resultHash: execution.resultHash,
+      status: execution.status,
+      resultNonce
+    };
+    const nodeSignature = cryptoSign(null, Buffer.from(stableStringify(payload)), this.resultKeyPair.privateKey).toString(
+      "base64url"
+    );
+    return {
+      resultNonce,
+      nodePublicKey: this.resultKeyPair.publicKey.export({ type: "spki", format: "pem" }),
+      nodeSignature
+    };
   }
 
   applyExecutionSideEffects(job, execution) {
@@ -476,4 +510,55 @@ function parseJsonObject(value) {
 
 function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function runLightweightBenchmark() {
+  const startedAt = Date.now();
+  let digest = "dispro";
+  let iterations = 0;
+  while (Date.now() - startedAt < 80) {
+    digest = createHash("sha256").update(digest).digest("hex");
+    iterations += 1;
+  }
+  const perSecond = Math.round(iterations / Math.max(0.08, (Date.now() - startedAt) / 1000));
+  return {
+    cpu: perSecond,
+    hash: perSecond,
+    memory: Math.round((totalmem() / 1024 ** 3) * 100)
+  };
+}
+
+function inferDeviceClass() {
+  const cpuCount = cpus().length;
+  const memoryGb = totalmem() / 1024 ** 3;
+  if (supportedWorkloads.some((workload) => workload.includes("gpu"))) {
+    return "gpu";
+  }
+  if (cpuCount >= 24 || memoryGb >= 96) {
+    return "server";
+  }
+  if (cpuCount >= 12 || memoryGb >= 24) {
+    return "desktop";
+  }
+  if (cpuCount >= 4 || memoryGb >= 6) {
+    return "laptop";
+  }
+  return "mobile";
+}
+
+function createClusterWords() {
+  return [...new Set(["electron-process-v1", inferDeviceClass(), ...supportedWorkloads.map((workload) => workload.split(".")[0])])];
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+    .join(",")}}`;
 }

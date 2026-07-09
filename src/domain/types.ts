@@ -284,6 +284,7 @@ export interface BillingCustomer {
 
 export type ProcessNodeMode = "idle" | "waiting" | "running" | "stopped" | "error";
 export type ProcessJobStatus = "queued" | "leased" | "running" | "completed" | "failed" | "rejected";
+export type WorkUnitStatus = "queued" | "replicating" | "canonical" | "failed";
 export type ProcessPaymentMode = "internal" | "external" | "smart_contract";
 export type ProcessResultStatus = "completed" | "failed" | "rejected";
 export type DistributedRecordType =
@@ -304,6 +305,23 @@ export interface ProcessNodeInfo {
   cpuCores: number;
   memoryGb: number;
   supportedWorkloads: string[];
+  deviceClass?: DeviceClass | undefined;
+  benchmarkScores?: NodeBenchmarkScores | undefined;
+  bandwidthMbps?: number | undefined;
+  thermalState?: "nominal" | "warm" | "hot" | undefined;
+  batteryState?: "plugged" | "battery" | "low" | "unknown" | undefined;
+  maxConcurrentJobs?: number | undefined;
+  peerId?: string | undefined;
+  clusterWords?: string[] | undefined;
+  regionLatencyBucket?: string | undefined;
+  runnerFamily?: string | undefined;
+  nodePublicKey?: string | undefined;
+}
+
+export interface NodeBenchmarkScores {
+  cpu?: number | undefined;
+  memory?: number | undefined;
+  hash?: number | undefined;
 }
 
 export interface ProcessNodeRecord {
@@ -316,9 +334,55 @@ export interface ProcessNodeRecord {
   cpuCores: number;
   memoryGb: number;
   supportedWorkloads: string[];
+  deviceClass?: DeviceClass | undefined;
+  benchmarkScores?: NodeBenchmarkScores | undefined;
+  bandwidthMbps?: number | undefined;
+  thermalState?: "nominal" | "warm" | "hot" | undefined;
+  batteryState?: "plugged" | "battery" | "low" | "unknown" | undefined;
+  maxConcurrentJobs?: number | undefined;
+  peerId?: string | undefined;
+  clusterWords?: string[] | undefined;
+  regionLatencyBucket?: string | undefined;
+  runnerFamily?: string | undefined;
+  nodePublicKey?: string | undefined;
   mode: ProcessNodeMode;
   currentJobId?: string;
   lastHeartbeatAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NodeCapabilitySnapshot {
+  id: string;
+  processNodeId: string;
+  userId: string;
+  deviceClass: DeviceClass;
+  cpuCores: number;
+  memoryGb: number;
+  bandwidthMbps: number;
+  benchmarkScores: NodeBenchmarkScores;
+  thermalState: "nominal" | "warm" | "hot";
+  batteryState: "plugged" | "battery" | "low" | "unknown";
+  maxConcurrentJobs: number;
+  supportedWorkloads: string[];
+  clusterWords: string[];
+  capturedAt: string;
+}
+
+export interface WorkUnit {
+  id: string;
+  orderId: string;
+  taskId: string;
+  workload: string;
+  status: WorkUnitStatus;
+  targetReplicas: number;
+  minConsensus: number;
+  requiredSuccessfulReplicas: number;
+  maxReplicas: number;
+  canonicalResultHash?: string | undefined;
+  canonicalJobId?: string | undefined;
+  batchKey: string;
+  inputPrivacy: JsonRecord;
   createdAt: string;
   updatedAt: string;
 }
@@ -327,8 +391,15 @@ export interface ProcessJob {
   id: string;
   orderId: string;
   taskId: string;
+  workUnitId?: string | undefined;
+  replicaIndex?: number | undefined;
+  targetReplicas?: number | undefined;
+  minConsensus?: number | undefined;
+  requiredSuccessfulReplicas?: number | undefined;
   workload: string;
   inputRef: JsonRecord;
+  inputPrivacy?: JsonRecord | undefined;
+  batchKey?: string | undefined;
   contractHash: string;
   cid: string;
   paymentMode: ProcessPaymentMode;
@@ -341,6 +412,7 @@ export interface ProcessJob {
   expiresAt?: string;
   assignedProcessNodeId?: string;
   assignedUserId?: string;
+  assignedMachineId?: string | undefined;
   leaseExpiresAt?: string;
 }
 
@@ -348,8 +420,15 @@ export interface SignedProcessJobEnvelope {
   jobId: string;
   orderId: string;
   taskId: string;
+  workUnitId?: string | undefined;
+  replicaIndex?: number | undefined;
+  targetReplicas?: number | undefined;
+  minConsensus?: number | undefined;
+  requiredSuccessfulReplicas?: number | undefined;
   workload: string;
   inputRef: JsonRecord;
+  inputPrivacy?: JsonRecord | undefined;
+  batchKey?: string | undefined;
   contractHash: string;
   cid: string;
   paymentMode: ProcessPaymentMode;
@@ -369,6 +448,10 @@ export interface ProcessJobResult {
   stderr: string;
   durationMs: number;
   metrics?: ProcessResultMetrics;
+  resultNonce?: string | undefined;
+  nodePublicKey?: string | undefined;
+  nodeSignature?: string | undefined;
+  canonical?: boolean | undefined;
   errorMessage?: string;
   createdAt: string;
 }
@@ -388,6 +471,25 @@ export interface ProcessEarnings {
   processedCount: number;
   failedCount: number;
   verificationCount: number;
+}
+
+export interface ConsensusRecord {
+  id: string;
+  workUnitId: string;
+  orderId: string;
+  taskId: string;
+  status: WorkUnitStatus;
+  targetReplicas: number;
+  minConsensus: number;
+  requiredSuccessfulReplicas: number;
+  successfulReplicaCount: number;
+  bestResultHash?: string | undefined;
+  bestResultCount: number;
+  canonicalResultHash?: string | undefined;
+  canonicalJobId?: string | undefined;
+  participantJobIds: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DistributedRecord {

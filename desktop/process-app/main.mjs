@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import { autoUpdater } from "electron-updater";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCredentialStore } from "./main/credentialStore.mjs";
@@ -33,7 +34,10 @@ function createWindow() {
   mainWindow.loadFile(join(__dirname, "renderer", "index.html"));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  configureAutoUpdates();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -92,3 +96,21 @@ ipcMain.handle("use:get-order", async (_event, orderId) => {
 ipcMain.handle("use:get-result", async (_event, orderId) => {
   return controller.getUseOrderResult(orderId);
 });
+
+function configureAutoUpdates() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.on("update-available", (info) => {
+    mainWindow?.webContents.send("process:status", {
+      ...controller.getStatus(),
+      update: {
+        version: info.version,
+        channel: "stable",
+        source: "github-releases",
+        receivedAt: new Date().toISOString()
+      },
+      message: `Update available: ${info.version}`
+    });
+  });
+  autoUpdater.on("error", () => undefined);
+  autoUpdater.checkForUpdates().catch(() => undefined);
+}

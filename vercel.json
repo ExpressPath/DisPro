@@ -24,6 +24,10 @@
       "dest": "/api/index.ts"
     },
     {
+      "src": "/downloads(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
       "src": "/billing/(.*)",
       "dest": "/api/index.ts"
     },

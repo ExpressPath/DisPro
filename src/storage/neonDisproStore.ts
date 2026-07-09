@@ -1,8 +1,10 @@
 import { neon } from "@neondatabase/serverless";
 import type {
   BillingCustomer,
+  ConsensusRecord,
   DistributedRecord,
   EmailSignInChallenge,
+  NodeCapabilitySnapshot,
   NodeProfile,
   PlannedOrder,
   ProcessJob,
@@ -12,7 +14,8 @@ import type {
   UserAccount,
   UserApiKey,
   UserSession,
-  UserTransaction
+  UserTransaction,
+  WorkUnit
 } from "../domain/types.js";
 import type { DisproStore, OrderSummary } from "./disproStore.js";
 import { summarizeOrder } from "./disproStore.js";
@@ -28,6 +31,9 @@ interface PersistedState {
   apiKeys: UserApiKey[];
   processNodes: ProcessNodeRecord[];
   processJobs: ProcessJob[];
+  workUnits: WorkUnit[];
+  consensusRecords: ConsensusRecord[];
+  nodeCapabilitySnapshots: NodeCapabilitySnapshot[];
   processJobResults: ProcessJobResult[];
   useOrders: UseOrderRecord[];
   billingCustomers: BillingCustomer[];
@@ -225,6 +231,62 @@ export class NeonDisproStore implements DisproStore {
     return clone(this.requireState().processJobs);
   }
 
+  async saveWorkUnit(workUnit: WorkUnit): Promise<void> {
+    await this.ensureLoaded();
+    upsertBy(this.requireState().workUnits, workUnit, (candidate) => candidate.id === workUnit.id);
+    await this.persist();
+  }
+
+  async getWorkUnit(workUnitId: string): Promise<WorkUnit | undefined> {
+    await this.ensureLoaded();
+    const workUnit = this.requireState().workUnits.find((candidate) => candidate.id === workUnitId);
+    return workUnit ? clone(workUnit) : undefined;
+  }
+
+  async listWorkUnits(): Promise<WorkUnit[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().workUnits);
+  }
+
+  async saveConsensusRecord(record: ConsensusRecord): Promise<void> {
+    await this.ensureLoaded();
+    upsertBy(this.requireState().consensusRecords, record, (candidate) => candidate.id === record.id);
+    await this.persist();
+  }
+
+  async getConsensusRecord(workUnitId: string): Promise<ConsensusRecord | undefined> {
+    await this.ensureLoaded();
+    const records = this.requireState().consensusRecords
+      .filter((candidate) => candidate.workUnitId === workUnitId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return records[0] ? clone(records[0]) : undefined;
+  }
+
+  async listConsensusRecords(): Promise<ConsensusRecord[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().consensusRecords);
+  }
+
+  async saveNodeCapabilitySnapshot(snapshot: NodeCapabilitySnapshot): Promise<void> {
+    await this.ensureLoaded();
+    upsertBy(
+      this.requireState().nodeCapabilitySnapshots,
+      snapshot,
+      (candidate) => candidate.id === snapshot.id
+    );
+    await this.persist();
+  }
+
+  async listNodeCapabilitySnapshots(processNodeId?: string): Promise<NodeCapabilitySnapshot[]> {
+    await this.ensureLoaded();
+    const snapshots = this.requireState().nodeCapabilitySnapshots;
+    return clone(
+      processNodeId === undefined
+        ? snapshots
+        : snapshots.filter((candidate) => candidate.processNodeId === processNodeId)
+    );
+  }
+
   async saveProcessJobResult(result: ProcessJobResult): Promise<void> {
     await this.ensureLoaded();
     upsertBy(this.requireState().processJobResults, result, (candidate) => candidate.id === result.id);
@@ -376,6 +438,9 @@ function createEmptyState(seedNodes: readonly NodeProfile[]): PersistedState {
     apiKeys: [],
     processNodes: [],
     processJobs: [],
+    workUnits: [],
+    consensusRecords: [],
+    nodeCapabilitySnapshots: [],
     processJobResults: [],
     useOrders: [],
     billingCustomers: [],
@@ -407,6 +472,13 @@ function normalizeState(value: unknown): PersistedState {
       : [],
     processNodes: Array.isArray(value.processNodes) ? (value.processNodes as ProcessNodeRecord[]) : [],
     processJobs: Array.isArray(value.processJobs) ? (value.processJobs as ProcessJob[]) : [],
+    workUnits: Array.isArray(value.workUnits) ? (value.workUnits as WorkUnit[]) : [],
+    consensusRecords: Array.isArray(value.consensusRecords)
+      ? (value.consensusRecords as ConsensusRecord[])
+      : [],
+    nodeCapabilitySnapshots: Array.isArray(value.nodeCapabilitySnapshots)
+      ? (value.nodeCapabilitySnapshots as NodeCapabilitySnapshot[])
+      : [],
     processJobResults: Array.isArray(value.processJobResults)
       ? (value.processJobResults as ProcessJobResult[])
       : [],

@@ -2,8 +2,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
   BillingCustomer,
+  ConsensusRecord,
   DistributedRecord,
   EmailSignInChallenge,
+  NodeCapabilitySnapshot,
   NodeProfile,
   PlannedOrder,
   ProcessJob,
@@ -13,7 +15,8 @@ import type {
   UserTransaction,
   UserAccount,
   UserApiKey,
-  UserSession
+  UserSession,
+  WorkUnit
 } from "../domain/types.js";
 import type { DisproStore, OrderSummary } from "./disproStore.js";
 import { summarizeOrder } from "./disproStore.js";
@@ -29,6 +32,9 @@ interface PersistedState {
   apiKeys: UserApiKey[];
   processNodes: ProcessNodeRecord[];
   processJobs: ProcessJob[];
+  workUnits: WorkUnit[];
+  consensusRecords: ConsensusRecord[];
+  nodeCapabilitySnapshots: NodeCapabilitySnapshot[];
   processJobResults: ProcessJobResult[];
   useOrders: UseOrderRecord[];
   billingCustomers: BillingCustomer[];
@@ -286,6 +292,82 @@ export class FileDisproStore implements DisproStore {
     return clone(this.requireState().processJobs);
   }
 
+  async saveWorkUnit(workUnit: WorkUnit): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.workUnits.findIndex((candidate) => candidate.id === workUnit.id);
+
+    if (index >= 0) {
+      state.workUnits[index] = clone(workUnit);
+    } else {
+      state.workUnits.push(clone(workUnit));
+    }
+
+    await this.persist();
+  }
+
+  async getWorkUnit(workUnitId: string): Promise<WorkUnit | undefined> {
+    await this.ensureLoaded();
+    const workUnit = this.requireState().workUnits.find((candidate) => candidate.id === workUnitId);
+    return workUnit ? clone(workUnit) : undefined;
+  }
+
+  async listWorkUnits(): Promise<WorkUnit[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().workUnits);
+  }
+
+  async saveConsensusRecord(record: ConsensusRecord): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.consensusRecords.findIndex((candidate) => candidate.id === record.id);
+
+    if (index >= 0) {
+      state.consensusRecords[index] = clone(record);
+    } else {
+      state.consensusRecords.push(clone(record));
+    }
+
+    await this.persist();
+  }
+
+  async getConsensusRecord(workUnitId: string): Promise<ConsensusRecord | undefined> {
+    await this.ensureLoaded();
+    const records = this.requireState().consensusRecords
+      .filter((candidate) => candidate.workUnitId === workUnitId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return records[0] ? clone(records[0]) : undefined;
+  }
+
+  async listConsensusRecords(): Promise<ConsensusRecord[]> {
+    await this.ensureLoaded();
+    return clone(this.requireState().consensusRecords);
+  }
+
+  async saveNodeCapabilitySnapshot(snapshot: NodeCapabilitySnapshot): Promise<void> {
+    await this.ensureLoaded();
+    const state = this.requireState();
+    const index = state.nodeCapabilitySnapshots.findIndex((candidate) => candidate.id === snapshot.id);
+
+    if (index >= 0) {
+      state.nodeCapabilitySnapshots[index] = clone(snapshot);
+    } else {
+      state.nodeCapabilitySnapshots.push(clone(snapshot));
+    }
+
+    await this.persist();
+  }
+
+  async listNodeCapabilitySnapshots(processNodeId?: string): Promise<NodeCapabilitySnapshot[]> {
+    await this.ensureLoaded();
+    const snapshots = this.requireState().nodeCapabilitySnapshots;
+    return clone(
+      processNodeId === undefined
+        ? snapshots
+        : snapshots.filter((candidate) => candidate.processNodeId === processNodeId)
+    );
+  }
+
   async saveProcessJobResult(result: ProcessJobResult): Promise<void> {
     await this.ensureLoaded();
     const state = this.requireState();
@@ -470,6 +552,9 @@ function createEmptyState(seedNodes: readonly NodeProfile[]): PersistedState {
     apiKeys: [],
     processNodes: [],
     processJobs: [],
+    workUnits: [],
+    consensusRecords: [],
+    nodeCapabilitySnapshots: [],
     processJobResults: [],
     useOrders: [],
     billingCustomers: [],
@@ -498,6 +583,13 @@ function normalizeState(value: unknown): PersistedState {
     : [];
   const processNodes = Array.isArray(value.processNodes) ? (value.processNodes as ProcessNodeRecord[]) : [];
   const processJobs = Array.isArray(value.processJobs) ? (value.processJobs as ProcessJob[]) : [];
+  const workUnits = Array.isArray(value.workUnits) ? (value.workUnits as WorkUnit[]) : [];
+  const consensusRecords = Array.isArray(value.consensusRecords)
+    ? (value.consensusRecords as ConsensusRecord[])
+    : [];
+  const nodeCapabilitySnapshots = Array.isArray(value.nodeCapabilitySnapshots)
+    ? (value.nodeCapabilitySnapshots as NodeCapabilitySnapshot[])
+    : [];
   const processJobResults = Array.isArray(value.processJobResults)
     ? (value.processJobResults as ProcessJobResult[])
     : [];
@@ -524,6 +616,9 @@ function normalizeState(value: unknown): PersistedState {
     apiKeys,
     processNodes,
     processJobs,
+    workUnits,
+    consensusRecords,
+    nodeCapabilitySnapshots,
     processJobResults,
     useOrders,
     billingCustomers,

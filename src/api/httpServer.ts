@@ -40,6 +40,7 @@ import {
   getUseOrderResult,
   listUseOrders
 } from "../services/useOrderService.js";
+import { getDownloadManifest, getWindowsProcessDownload } from "../services/downloadService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
 const MAX_JSON_BODY_BYTES = 5 * 1024 * 1024;
@@ -58,6 +59,8 @@ export interface DisproHttpServerOptions {
 interface JsonResponse {
   status: number;
   body: unknown;
+  headers?: Record<string, string | string[]>;
+  redirectLocation?: string;
 }
 
 export function createDisproHttpServer(options: DisproHttpServerOptions): Server {
@@ -135,7 +138,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   }
 
   const result = await route(method, parts, request, context, url);
-  writeJson(response, result.status, result.body);
+  writeJson(response, result.status, result.body, result.headers, result.redirectLocation);
 }
 
 async function route(
@@ -164,6 +167,29 @@ async function route(
       body: {
         nodes: await store.listNodes()
       }
+    };
+  }
+
+  if (method === "GET" && parts.length === 1 && parts[0] === "downloads") {
+    return {
+      status: 200,
+      body: await getDownloadManifest()
+    };
+  }
+
+  if (
+    method === "GET" &&
+    parts.length === 4 &&
+    parts[0] === "downloads" &&
+    parts[1] === "windows" &&
+    parts[2] === "process" &&
+    parts[3] === "latest"
+  ) {
+    const download = await getWindowsProcessDownload();
+    return {
+      status: 302,
+      body: null,
+      redirectLocation: download.downloadUrl
     };
   }
 
@@ -208,10 +234,25 @@ async function route(
 
     return {
       status: 200,
+      headers: {
+        "set-cookie": buildSessionCookie(result.sessionToken, result.sessionExpiresAt)
+      },
       body: {
         user: publicUser(result.user),
         sessionToken: result.sessionToken,
         sessionExpiresAt: result.sessionExpiresAt
+      }
+    };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "auth" && parts[1] === "logout") {
+    return {
+      status: 200,
+      headers: {
+        "set-cookie": clearSessionCookie()
+      },
+      body: {
+        ok: true
       }
     };
   }
@@ -543,7 +584,8 @@ async function getOrderOrThrow(store: DisproStore, orderId: string | undefined, 
 }
 
 async function requireAuth(store: DisproStore, request: IncomingMessage, now: () => Date): Promise<AuthContext> {
-  return authenticateBearerToken(store, request.headers.authorization, now());
+  const authorization = request.headers.authorization ?? bearerFromSessionCookie(request.headers.cookie);
+  return authenticateBearerToken(store, authorization, now());
 }
 
 async function requireProcessAuth(store: DisproStore, request: IncomingMessage, now: () => Date): Promise<AuthContext> {
@@ -616,11 +658,28 @@ function validateNode(node: NodeProfile): void {
   }
 }
 
-function writeJson(response: ServerResponse, status: number, body: unknown): void {
+function writeJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string | string[]> = {},
+  redirectLocation?: string
+): void {
   response.statusCode = status;
   response.setHeader("access-control-allow-origin", "*");
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type, authorization, stripe-signature");
+  response.setHeader("access-control-allow-credentials", "true");
+
+  for (const [name, value] of Object.entries(headers)) {
+    response.setHeader(name, value);
+  }
+
+  if (redirectLocation) {
+    response.setHeader("location", redirectLocation);
+    response.end();
+    return;
+  }
 
   if (status === 204) {
     response.end();
@@ -716,4 +775,43 @@ function getRequestBaseUrl(request: IncomingMessage): string {
 
 function firstHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function bearerFromSessionCookie(cookieHeader: string | undefined): string | undefined {
+  const cookies = parseCookies(cookieHeader);
+  const token = cookies.dispro_session;
+  return token ? `Bearer ${token}` : undefined;
+}
+
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  if (!cookieHeader) {
+    return {};
+  }
+  return Object.fromEntries(
+    cookieHeader.split(";").flatMap((part) => {
+      const index = part.indexOf("=");
+      if (index < 0) {
+        return [];
+      }
+      const key = part.slice(0, index).trim();
+      const value = part.slice(index + 1).trim();
+      return key ? [[key, decodeURIComponent(value)]] : [];
+    })
+  );
+}
+
+function buildSessionCookie(sessionToken: string, sessionExpiresAt: string): string {
+  const maxAgeSeconds = Math.max(0, Math.floor((new Date(sessionExpiresAt).getTime() - Date.now()) / 1000));
+  return [
+    `dispro_session=${encodeURIComponent(sessionToken)}`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+    `Max-Age=${maxAgeSeconds}`
+  ].join("; ");
+}
+
+function clearSessionCookie(): string {
+  return "dispro_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0";
 }

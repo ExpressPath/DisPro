@@ -20,8 +20,10 @@
       <nav class="site-nav" aria-label="Primary">
         <a href="#platform">Platform</a>
         <a href="#api">API</a>
+        <a href="#downloads">Downloads</a>
+        <a href="#account">Account</a>
         <a href="#network">Network</a>
-        <a class="nav-action" href="health">Status</a>
+        <a class="nav-action" href="#account">Sign in</a>
       </nav>
     </header>
 
@@ -153,6 +155,68 @@
             <h3>Trusted execution</h3>
             <p>Enterprise, urgent, long-running, and GPU-heavy jobs can be restricted to high-trust node pools.</p>
           </article>
+        </div>
+      </section>
+
+      <section id="downloads" class="section downloads-section">
+        <div class="section-heading">
+          <p class="eyebrow">Downloads</p>
+          <h2>Run Dispro Process on Windows and let the network route work to the right machine.</h2>
+        </div>
+        <div class="download-table-wrap">
+          <table class="download-table">
+            <thead>
+              <tr>
+                <th>Platform</th>
+                <th>Role</th>
+                <th>Version</th>
+                <th>Recommended device</th>
+                <th>SHA-256</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="download-rows">
+              <tr>
+                <td colspan="6">Loading downloads...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="account" class="section account-section">
+        <div class="section-heading">
+          <p class="eyebrow">Account</p>
+          <h2>Connect your email account to API keys, Process nodes, orders, and distributed records.</h2>
+        </div>
+        <div class="account-layout">
+          <form id="site-login-form" class="account-panel">
+            <h3>Sign in</h3>
+            <p>Enter your email, then confirm the six-digit code sent by Dispro.</p>
+            <label>
+              Email
+              <input id="site-email" type="email" placeholder="you@example.com" required />
+            </label>
+            <button class="button button-primary" type="submit">Send code</button>
+          </form>
+
+          <form id="site-verify-form" class="account-panel hidden">
+            <h3>Verify</h3>
+            <p>The secure session is stored as an HTTP-only cookie on this official site.</p>
+            <label>
+              Verification code
+              <input id="site-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required />
+            </label>
+            <button class="button button-primary" type="submit">Verify</button>
+          </form>
+
+          <section class="account-panel account-profile">
+            <div class="profile-head">
+              <h3>Profile</h3>
+              <button id="site-logout-button" class="button button-secondary" type="button">Log out</button>
+            </div>
+            <pre id="account-output" class="account-output">Not signed in.</pre>
+          </section>
         </div>
       </section>
     </main>

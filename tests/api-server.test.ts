@@ -256,6 +256,51 @@ test("rejects reused email verification codes", async () => {
   }
 });
 
+test("sets a secure session cookie, supports cookie auth, and logs out", async () => {
+  const { baseUrl, close } = await createTestApi();
+  const email = "cookie-owner@example.com";
+
+  try {
+    const requestResponse = await fetch(`${baseUrl}/auth/request-code`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email })
+    });
+    const requestBody = (await requestResponse.json()) as { devVerificationCode?: string };
+
+    const verifyResponse = await fetch(`${baseUrl}/auth/verify`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email, code: requestBody.devVerificationCode })
+    });
+    assert.equal(verifyResponse.status, 200);
+    const cookie = verifyResponse.headers.get("set-cookie") ?? "";
+    assert.match(cookie, /dispro_session=/);
+    assert.match(cookie, /HttpOnly/);
+    assert.match(cookie, /Secure/);
+    assert.match(cookie, /SameSite=Lax/);
+
+    const profileResponse = await fetch(`${baseUrl}/account/profile`, {
+      headers: {
+        cookie
+      }
+    });
+    assert.equal(profileResponse.status, 200);
+
+    const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
+      method: "POST"
+    });
+    assert.equal(logoutResponse.status, 200);
+    assert.match(logoutResponse.headers.get("set-cookie") ?? "", /Max-Age=0/);
+  } finally {
+    await close();
+  }
+});
+
 test("registers a process node, leases a signed job, submits result, and reports earnings", async () => {
   const { baseUrl, close, store } = await createTestApi();
 
@@ -563,6 +608,29 @@ test("anchors user profile and process earning transactions through signed speci
   }
 });
 
+test("serves Windows Process downloads and redirects to the release asset", async () => {
+  const { baseUrl, close } = await createTestApi();
+
+  try {
+    const manifestResponse = await fetch(`${baseUrl}/downloads`);
+    assert.equal(manifestResponse.status, 200);
+    const manifest = (await manifestResponse.json()) as {
+      downloads: Array<{ platform: string; app: string; sha256: string; downloadUrl: string }>;
+    };
+    assert.equal(manifest.downloads[0]?.platform, "windows");
+    assert.equal(manifest.downloads[0]?.app, "process");
+    assert.match(manifest.downloads[0]?.sha256 ?? "", /^[a-f0-9]{64}$/);
+
+    const redirectResponse = await fetch(`${baseUrl}/downloads/windows/process/latest`, {
+      redirect: "manual"
+    });
+    assert.equal(redirectResponse.status, 302);
+    assert.match(redirectResponse.headers.get("location") ?? "", /github\.com\/ExpressPath\/DisPro\/releases/);
+  } finally {
+    await close();
+  }
+});
+
 test("creates Use API keys, requires billing setup, finalizes metered results, and records mock Stripe payment", async () => {
   const previousMock = process.env.DISPRO_STRIPE_MOCK;
   const previousPublishable = process.env.STRIPE_PUBLISHABLE_KEY;
@@ -658,7 +726,7 @@ test("creates Use API keys, requires billing setup, finalizes metered results, a
         processNodeId: "test-node",
         userId: "processor-user",
         status: "completed",
-        resultHash: `hash-${job.id}`,
+        resultHash: `hash-${job.workUnitId ?? job.id}`,
         stdout: JSON.stringify({ ok: true, jobId: job.id }),
         stderr: "",
         durationMs: 25,
@@ -715,6 +783,101 @@ test("creates Use API keys, requires billing setup, finalizes metered results, a
       ),
       true
     );
+  } finally {
+    if (previousMock === undefined) {
+      delete process.env.DISPRO_STRIPE_MOCK;
+    } else {
+      process.env.DISPRO_STRIPE_MOCK = previousMock;
+    }
+    if (previousPublishable === undefined) {
+      delete process.env.STRIPE_PUBLISHABLE_KEY;
+    } else {
+      process.env.STRIPE_PUBLISHABLE_KEY = previousPublishable;
+    }
+    await close();
+  }
+});
+
+test("requires three successful compute replicas before Use billing finalizes", async () => {
+  const previousMock = process.env.DISPRO_STRIPE_MOCK;
+  const previousPublishable = process.env.STRIPE_PUBLISHABLE_KEY;
+  process.env.DISPRO_STRIPE_MOCK = "true";
+  process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_mock";
+  const { baseUrl, close, store } = await createTestApi();
+
+  try {
+    const sessionToken = await signInAndGetSessionToken(baseUrl, "triple-use-owner@example.com");
+    const useApiKeyResponse = await fetch(`${baseUrl}/auth/api-keys`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ label: "use-triple", purpose: "use" })
+    });
+    const useApiKeyBody = (await useApiKeyResponse.json()) as { secret: string };
+
+    await fetch(`${baseUrl}/billing/setup-session`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({})
+    });
+
+    const createOrderResponse = await fetch(`${baseUrl}/use/orders?seed=triple-seed`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        id: "use_order_triple_001",
+        source: {
+          kind: "url",
+          uri: "https://example.test/triple.txt",
+          byteSize: 1024,
+          contentHash: "triple-order-content-hash"
+        },
+        workload: "hash.compute",
+        maxChargeMicroYen: 100_000_000
+      })
+    });
+    assert.equal(createOrderResponse.status, 201);
+
+    const plan = await store.getPlannedOrder("use_order_triple_001");
+    const jobs = (await store.listProcessJobs()).filter((job) => job.orderId === "use_order_triple_001");
+    const computeTask = plan?.tasks.find((task) => task.kind === "compute");
+    assert.ok(computeTask);
+    const computeJobs = jobs.filter((job) => job.taskId === computeTask.id);
+    assert.equal(computeJobs.length, 3);
+    assert.equal(new Set(computeJobs.map((job) => job.workUnitId)).size, 1);
+
+    for (const job of computeJobs.slice(0, 2)) {
+      await completeStoredJob(store, job.id, `hash-${job.workUnitId}`);
+    }
+    for (const job of jobs.filter((job) => job.taskId !== computeTask.id)) {
+      await completeStoredJob(store, job.id, `hash-${job.workUnitId ?? job.id}`);
+    }
+
+    const pendingResponse = await fetch(`${baseUrl}/use/orders/use_order_triple_001`, {
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`
+      }
+    });
+    const pending = (await pendingResponse.json()) as { order: { status: string; billingStatus: string } };
+    assert.notEqual(pending.order.status, "paid");
+
+    await completeStoredJob(store, computeJobs[2]?.id ?? "", `hash-${computeJobs[2]?.workUnitId}`);
+    const paidResponse = await fetch(`${baseUrl}/use/orders/use_order_triple_001`, {
+      headers: {
+        authorization: `Bearer ${useApiKeyBody.secret}`
+      }
+    });
+    const paid = (await paidResponse.json()) as { order: { status: string; billingStatus: string } };
+    assert.equal(paid.order.status, "paid");
+    assert.equal(paid.order.billingStatus, "paid");
   } finally {
     if (previousMock === undefined) {
       delete process.env.DISPRO_STRIPE_MOCK;
@@ -826,4 +989,33 @@ async function signInAndGetSessionToken(baseUrl: string, email: string): Promise
   const verifyBody = (await verifyResponse.json()) as { sessionToken?: string };
   assert.ok(verifyBody.sessionToken);
   return verifyBody.sessionToken;
+}
+
+async function completeStoredJob(store: FileDisproStore, jobId: string, resultHash: string): Promise<void> {
+  const job = await store.getProcessJob(jobId);
+  assert.ok(job);
+  await store.saveProcessJob({
+    ...job,
+    status: "completed",
+    updatedAt: "2026-07-04T00:00:01.000Z"
+  });
+  await store.saveProcessJobResult({
+    id: `result-${job.id}`,
+    jobId: job.id,
+    processNodeId: `node-${job.id}`,
+    userId: "processor-user",
+    status: "completed",
+    resultHash,
+    stdout: JSON.stringify({ ok: true, jobId: job.id }),
+    stderr: "",
+    durationMs: 25,
+    metrics: {
+      durationMs: 25,
+      inputBytes: 16,
+      outputBytes: 64,
+      computeUnits: 3000,
+      runnerWorkUnits: 3000
+    },
+    createdAt: "2026-07-04T00:00:01.000Z"
+  });
 }

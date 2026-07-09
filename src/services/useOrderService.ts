@@ -21,7 +21,8 @@ import {
 import {
   enqueueDistributedRecordAnchorJob,
   enqueueProcessJobsForPlan,
-  enqueueTransactionAnchorJob
+  enqueueTransactionAnchorJob,
+  getOrderProcessingState
 } from "./processService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
@@ -182,12 +183,12 @@ async function refreshUseOrder(
     return order;
   }
 
-  const jobs = (await store.listProcessJobs()).filter((job) => job.orderId === plan.order.id);
-  if (jobs.length === 0) {
+  const processingState = await getOrderProcessingState(store, plan.order.id);
+  if (!processingState.ready && !processingState.failed && processingState.pendingWorkUnitIds.length === 0) {
     return order;
   }
 
-  if (jobs.some((job) => job.status === "failed" || job.status === "rejected")) {
+  if (processingState.failed) {
     const failed = {
       ...order,
       status: "failed" as const,
@@ -197,10 +198,8 @@ async function refreshUseOrder(
     return failed;
   }
 
-  if (!jobs.every((job) => job.status === "completed")) {
-    const status: UseOrderRecord["status"] = jobs.some((job) => job.status === "leased" || job.status === "running")
-      ? "processing"
-      : "queued";
+  if (!processingState.ready) {
+    const status: UseOrderRecord["status"] = processingState.processing ? "processing" : "queued";
     const processing: UseOrderRecord = {
       ...order,
       status,
@@ -210,8 +209,8 @@ async function refreshUseOrder(
     return processing;
   }
 
-  const results = await getResultsForJobs(store, jobs);
-  if (results.length < jobs.length) {
+  const results = processingState.results;
+  if (results.length === 0) {
     return order;
   }
 
