@@ -8,13 +8,10 @@ import { FileDisproStore } from "../src/storage/fileDisproStore.js";
 import { NeonDisproStore } from "../src/storage/neonDisproStore.js";
 
 const dataPath = process.env.DISPRO_DATA_PATH ?? join(tmpdir(), "dispro-vercel-state.json");
-const storePromise =
-  process.env.DATABASE_URL === undefined
-    ? FileDisproStore.open(dataPath, sampleNodes)
-    : NeonDisproStore.open(process.env.DATABASE_URL, sampleNodes);
+let storePromise: ReturnType<typeof openStore> | undefined;
 
 export default async function handler(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  const store = await storePromise;
+  const store = await getStore();
   const authOptions = {
     mailer: createMailerFromEnv(),
     exposeDevSignInLinks: shouldExposeDevSignInCodes()
@@ -32,6 +29,22 @@ export default async function handler(request: IncomingMessage, response: Server
       auth: authOptions
     })(request, response);
   });
+}
+
+async function getStore() {
+  storePromise ??= openStore();
+  try {
+    return await storePromise;
+  } catch (error) {
+    storePromise = undefined;
+    throw error;
+  }
+}
+
+async function openStore() {
+  return process.env.DATABASE_URL === undefined
+    ? FileDisproStore.open(dataPath, sampleNodes)
+    : NeonDisproStore.open(process.env.DATABASE_URL, sampleNodes);
 }
 
 function shouldExposeDevSignInCodes(): boolean {
