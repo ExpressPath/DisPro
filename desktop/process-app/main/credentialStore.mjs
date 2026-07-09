@@ -51,7 +51,12 @@ export function createCredentialStore(serviceName) {
 async function loadKeytar() {
   try {
     const moduleName = "keytar";
-    return await import(moduleName);
+    const imported = await import(moduleName);
+    const keytar = imported.default ?? imported;
+    if (!isKeytarLike(keytar)) {
+      throw new Error("keytar module loaded without credential methods.");
+    }
+    return keytar;
   } catch (error) {
     if (process.env.DISPRO_ALLOW_INSECURE_CREDENTIAL_FALLBACK === "true") {
       return memoryCredentialStore;
@@ -61,6 +66,15 @@ async function loadKeytar() {
       "Windows Credential Manager dependency is unavailable. Install optional dependency keytar or set DISPRO_ALLOW_INSECURE_CREDENTIAL_FALLBACK=true for temporary local development."
     );
   }
+}
+
+function isKeytarLike(value) {
+  return (
+    value &&
+    typeof value.setPassword === "function" &&
+    typeof value.getPassword === "function" &&
+    typeof value.deletePassword === "function"
+  );
 }
 
 const memory = new Map();
