@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { autoUpdater } from "electron-updater";
+import electronUpdater from "electron-updater";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCredentialStore } from "./main/credentialStore.mjs";
@@ -7,6 +7,7 @@ import { ProcessController } from "./main/processController.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const credentials = createCredentialStore("Dispro Process");
+const { autoUpdater } = electronUpdater;
 let mainWindow;
 let controller;
 
