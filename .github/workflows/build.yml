@@ -68,7 +68,7 @@ jobs:
         run: npm test
 
       - name: Package Windows Process app
-        run: npm run desktop:pack
+        run: npx.cmd electron-builder --win portable --publish never
 
       - name: Prepare release assets
         shell: pwsh
