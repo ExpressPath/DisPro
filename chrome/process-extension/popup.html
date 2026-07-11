@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dispro Process</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="mark" aria-hidden="true"></span>
+        <div><h1>Dispro Process</h1><p>Chrome node</p></div>
+      </header>
+
+      <form id="login-form" class="stack">
+        <label>Email address<input id="email" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
+        <button type="submit">Send verification code</button>
+      </form>
+      <form id="verify-form" class="stack hidden">
+        <label>Email verification code<input id="verification-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456" required /></label>
+        <button type="submit">Verify and create session keys</button>
+      </form>
+
+      <p id="auth-lock" class="notice">Verify your email before Process or Use actions.</p>
+      <div class="tabs">
+        <button id="process-tab" class="active" type="button">Earn - Process</button>
+        <button id="use-tab" type="button">Use</button>
+      </div>
+
+      <section id="process-section">
+        <div class="status-grid">
+          <div><span>Status</span><strong id="status-mode">locked</strong></div>
+          <div><span>Processed</span><strong id="processed-count">0</strong></div>
+          <div><span>Failed</span><strong id="failed-count">0</strong></div>
+          <div><span>Provisional</span><strong id="provisional">0 JPY</strong></div>
+          <div><span>Confirmed</span><strong id="confirmed">0 JPY</strong></div>
+          <div><span>Available</span><strong id="available">0 JPY</strong></div>
+        </div>
+        <div class="actions">
+          <button id="start-button" type="button">Start Processing</button>
+          <button id="stop-button" class="secondary" type="button">Stop</button>
+        </div>
+        <div class="actions">
+          <button id="payout-button" class="secondary" type="button">Set up payouts</button>
+          <button id="update-button" class="secondary hidden" type="button">Open update</button>
+        </div>
+      </section>
+
+      <section id="use-section" class="hidden">
+        <div class="status-grid compact">
+          <div><span>Billing</span><strong id="billing-status">locked</strong></div>
+          <div><span>Order</span><strong id="order-status">none</strong></div>
+          <div><span>Estimate</span><strong id="order-estimate">0 JPY</strong></div>
+          <div><span>Charged</span><strong id="order-final">0 JPY</strong></div>
+        </div>
+        <div class="actions"><button id="billing-button" class="secondary" type="button">Register payment method</button></div>
+        <form id="order-form" class="stack">
+          <label>Source URL or CID<input id="source-uri" type="text" placeholder="https://example.com/input.json" required /></label>
+          <label>Content hash<input id="content-hash" type="text" placeholder="sha256..." required /></label>
+          <label>Byte size<input id="byte-size" type="number" min="1" value="1024" required /></label>
+          <label>Workload<input id="workload" type="text" value="hash.compute" required /></label>
+          <label>Max charge micro-yen<input id="max-charge" type="number" min="1" placeholder="optional" /></label>
+          <button type="submit">Create Use Order</button>
+        </form>
+        <div class="actions"><button id="refresh-order" class="secondary" type="button">Refresh order</button><button id="result-button" class="secondary" type="button">Get result</button></div>
+      </section>
+
+      <div class="actions"><button id="sign-out" class="text-button" type="button">Clear browser session</button></div>
+      <pre id="log">Ready.</pre>
+    </main>
+    <script src="popup.mjs" type="module"></script>
+  </body>
+</html>

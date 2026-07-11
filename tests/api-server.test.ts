@@ -608,7 +608,7 @@ test("anchors user profile and process earning transactions through signed speci
   }
 });
 
-test("serves Windows Process downloads and redirects to the release asset", async () => {
+test("serves Windows and Chrome Process downloads and redirects to their release assets", async () => {
   const { baseUrl, close } = await createTestApi();
 
   try {
@@ -617,15 +617,24 @@ test("serves Windows Process downloads and redirects to the release asset", asyn
     const manifest = (await manifestResponse.json()) as {
       downloads: Array<{ platform: string; app: string; sha256: string; downloadUrl: string }>;
     };
-    assert.equal(manifest.downloads[0]?.platform, "windows");
-    assert.equal(manifest.downloads[0]?.app, "process");
-    assert.match(manifest.downloads[0]?.sha256 ?? "", /^[a-f0-9]{64}$/);
+    const windows = manifest.downloads.find((download) => download.platform === "windows");
+    const chrome = manifest.downloads.find((download) => download.platform === "chrome");
+    assert.equal(windows?.app, "process");
+    assert.match(windows?.sha256 ?? "", /^[a-f0-9]{64}$/);
+    assert.equal(chrome?.app, "process");
+    assert.match(chrome?.sha256 ?? "", /^[a-f0-9]{64}$/);
 
     const redirectResponse = await fetch(`${baseUrl}/downloads/windows/process/latest`, {
       redirect: "manual"
     });
     assert.equal(redirectResponse.status, 302);
     assert.match(redirectResponse.headers.get("location") ?? "", /github\.com\/ExpressPath\/DisPro\/releases/);
+
+    const chromeRedirectResponse = await fetch(`${baseUrl}/downloads/chrome/process/latest`, {
+      redirect: "manual"
+    });
+    assert.equal(chromeRedirectResponse.status, 302);
+    assert.match(chromeRedirectResponse.headers.get("location") ?? "", /Dispro-Process-Chrome\.zip/);
   } finally {
     await close();
   }

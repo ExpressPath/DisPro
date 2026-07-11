@@ -110,7 +110,7 @@ async function refreshDownloads() {
             <td>${escapeHtml(item.version)}</td>
             <td>${escapeHtml(item.recommendedDevice)}</td>
             <td><code>${escapeHtml(shortHash(item.sha256))}</code></td>
-            <td><a class="button button-primary" href="downloads/windows/process/latest">Download</a></td>
+            <td><a class="button button-primary" href="downloads/${encodeURIComponent(item.platform)}/process/latest">Download</a></td>
           </tr>
         `
       )

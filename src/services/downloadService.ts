@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 export interface DownloadManifestItem {
-  platform: "windows";
-  architecture: "x64";
+  platform: "windows" | "chrome";
+  architecture: "x64" | "browser";
   app: "process";
   version: string;
   fileName: string;
@@ -14,16 +14,16 @@ export interface DownloadManifestItem {
   role: string;
   recommendedDevice: string;
   minimumSpec: string;
-  updateProvider: "github-releases" | "vercel-blob" | "manual";
+  updateProvider: "github-releases" | "chrome-web-store" | "vercel-blob" | "manual";
 }
 
 const STABLE_WINDOWS_ASSET = "Dispro-Process-Windows-x64.exe";
 const FALLBACK_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000";
 
 export async function getDownloadManifest(): Promise<{ downloads: DownloadManifestItem[] }> {
-  const item = await getWindowsProcessDownload();
+  const [windows, chrome] = await Promise.all([getWindowsProcessDownload(), getChromeProcessDownload()]);
   return {
-    downloads: [item]
+    downloads: [windows, chrome]
   };
 }
 
@@ -49,6 +49,29 @@ export async function getWindowsProcessDownload(): Promise<DownloadManifestItem>
     recommendedDevice: "Laptop, desktop, GPU PC, or server",
     minimumSpec: "Windows 10/11 x64, 4 CPU cores, 6 GB RAM, stable network",
     updateProvider: downloadUrl.includes("github.com") ? "github-releases" : "manual"
+  };
+}
+
+export async function getChromeProcessDownload(): Promise<DownloadManifestItem> {
+  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.3";
+  const fileName = process.env.DISPRO_CHROME_PROCESS_FILE_NAME ?? "Dispro-Process-Chrome.zip";
+  const downloadUrl =
+    process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_URL ??
+    `https://github.com/ExpressPath/DisPro/releases/latest/download/${encodeURIComponent(fileName)}`;
+
+  return {
+    platform: "chrome",
+    architecture: "browser",
+    app: "process",
+    version,
+    fileName,
+    sizeBytes: parseNumber(process.env.DISPRO_CHROME_PROCESS_SIZE_BYTES, 0),
+    sha256: process.env.DISPRO_CHROME_PROCESS_SHA256 ?? FALLBACK_SHA256,
+    downloadUrl,
+    role: "Earn - Process browser node",
+    recommendedDevice: "Chrome on laptop or desktop",
+    minimumSpec: "Chrome 113+, 4 CPU cores, 6 GB RAM, stable network",
+    updateProvider: process.env.DISPRO_CHROME_PROCESS_WEB_STORE_URL ? "chrome-web-store" : "github-releases"
   };
 }
 

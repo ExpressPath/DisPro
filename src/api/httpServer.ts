@@ -43,7 +43,7 @@ import {
 } from "../services/useOrderService.js";
 import { ConfidentialInputError } from "../services/confidentialInputService.js";
 import { makeId } from "../domain/ids.js";
-import { getDownloadManifest, getWindowsProcessDownload } from "../services/downloadService.js";
+import { getChromeProcessDownload, getDownloadManifest, getWindowsProcessDownload } from "../services/downloadService.js";
 import { WalletError, createConnectOnboarding, getWalletSummary, refreshConnectStatus, requestPayout } from "../services/walletService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
@@ -198,11 +198,11 @@ async function route(
     method === "GET" &&
     parts.length === 4 &&
     parts[0] === "downloads" &&
-    parts[1] === "windows" &&
+    (parts[1] === "windows" || parts[1] === "chrome") &&
     parts[2] === "process" &&
     parts[3] === "latest"
   ) {
-    const download = await getWindowsProcessDownload();
+    const download = parts[1] === "chrome" ? await getChromeProcessDownload() : await getWindowsProcessDownload();
     return {
       status: 302,
       body: null,

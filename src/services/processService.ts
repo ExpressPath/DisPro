@@ -966,9 +966,16 @@ async function ensureAppUpdateJob(
   currentVersion: string,
   now: Date
 ): Promise<ProcessJob | undefined> {
-  const updateVersion = process.env.DISPRO_PROCESS_UPDATE_VERSION;
-  const downloadUrl = process.env.DISPRO_PROCESS_UPDATE_URL;
-  const sha256 = process.env.DISPRO_PROCESS_UPDATE_SHA256;
+  const isChromeExtension = node.runnerFamily?.startsWith("chrome-extension-") ?? false;
+  const updateVersion = isChromeExtension
+    ? process.env.DISPRO_CHROME_PROCESS_UPDATE_VERSION
+    : process.env.DISPRO_PROCESS_UPDATE_VERSION;
+  const downloadUrl = isChromeExtension
+    ? process.env.DISPRO_CHROME_PROCESS_UPDATE_URL
+    : process.env.DISPRO_PROCESS_UPDATE_URL;
+  const sha256 = isChromeExtension
+    ? process.env.DISPRO_CHROME_PROCESS_UPDATE_SHA256
+    : process.env.DISPRO_PROCESS_UPDATE_SHA256;
   if (!updateVersion || !downloadUrl || !sha256 || updateVersion === currentVersion) {
     return undefined;
   }
@@ -986,12 +993,19 @@ async function ensureAppUpdateJob(
       provider: "local",
       manifest: {
         version: updateVersion,
-        platform: "win32",
-        channel: process.env.DISPRO_PROCESS_UPDATE_CHANNEL ?? "stable",
+        platform: isChromeExtension ? "chrome" : "win32",
+        channel: isChromeExtension
+          ? process.env.DISPRO_CHROME_PROCESS_UPDATE_CHANNEL ?? "stable"
+          : process.env.DISPRO_PROCESS_UPDATE_CHANNEL ?? "stable",
         downloadUrl,
         sha256,
-        mandatory: process.env.DISPRO_PROCESS_UPDATE_MANDATORY === "true",
-        notes: process.env.DISPRO_PROCESS_UPDATE_NOTES ?? ""
+        mandatory: isChromeExtension
+          ? process.env.DISPRO_CHROME_PROCESS_UPDATE_MANDATORY === "true"
+          : process.env.DISPRO_PROCESS_UPDATE_MANDATORY === "true",
+        notes: isChromeExtension
+          ? process.env.DISPRO_CHROME_PROCESS_UPDATE_NOTES ?? ""
+          : process.env.DISPRO_PROCESS_UPDATE_NOTES ?? "",
+        webStoreUrl: isChromeExtension ? process.env.DISPRO_CHROME_PROCESS_WEB_STORE_URL ?? "" : ""
       }
     },
     now

@@ -70,6 +70,9 @@ jobs:
       - name: Package Windows Process app
         run: npx.cmd electron-builder --win portable --publish never
 
+      - name: Build Chrome Process extension
+        run: npm.cmd run chrome:build
+
       - name: Prepare release assets
         shell: pwsh
         run: |
@@ -93,6 +96,22 @@ jobs:
           Set-Content -Path "release/windows-process-manifest.json" -Value $manifest -Encoding UTF8
           Set-Content -Path "release/Dispro-Process-Windows-x64.sha256" -Value "$hash  Dispro-Process-Windows-x64.exe" -Encoding UTF8
           Set-Content -Path "release/latest.yml" -Value "version: $version`nfiles:`n  - url: Dispro-Process-Windows-x64.exe`n    sha512: $sha512`n    size: $size`npath: Dispro-Process-Windows-x64.exe`nreleaseDate: $((Get-Date).ToUniversalTime().ToString('o'))`n" -Encoding UTF8
+          $chrome = "release/Dispro-Process-Chrome.zip"
+          if (Test-Path $chrome) { Remove-Item -LiteralPath $chrome -Force }
+          Compress-Archive -Path "dist/chrome-process/*" -DestinationPath $chrome -CompressionLevel Optimal
+          $chromeHash = (Get-FileHash -Path $chrome -Algorithm SHA256).Hash.ToLowerInvariant()
+          $chromeSize = (Get-Item -LiteralPath $chrome).Length
+          $chromeManifest = @{
+            version = $version
+            platform = "chrome"
+            architecture = "browser"
+            fileName = "Dispro-Process-Chrome.zip"
+            sizeBytes = $chromeSize
+            sha256 = $chromeHash
+            provider = "github-releases"
+          } | ConvertTo-Json -Depth 4
+          Set-Content -Path "release/chrome-process-manifest.json" -Value $chromeManifest -Encoding UTF8
+          Set-Content -Path "release/Dispro-Process-Chrome.sha256" -Value "$chromeHash  Dispro-Process-Chrome.zip" -Encoding UTF8
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -102,3 +121,6 @@ jobs:
             release/Dispro-Process-Windows-x64.sha256
             release/windows-process-manifest.json
             release/latest.yml
+            release/Dispro-Process-Chrome.zip
+            release/Dispro-Process-Chrome.sha256
+            release/chrome-process-manifest.json

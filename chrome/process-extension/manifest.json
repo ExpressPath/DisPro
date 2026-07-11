@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Dispro Process",
+  "version": "0.0.0",
+  "description": "Run signed Dispro Process jobs safely from Chrome.",
+  "minimum_chrome_version": "113",
+  "action": {
+    "default_title": "Dispro Process",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
+  },
+  "permissions": ["alarms", "storage"],
+  "host_permissions": ["https://dis-pro-liart.vercel.app/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://dis-pro-liart.vercel.app"
+  }
+}
