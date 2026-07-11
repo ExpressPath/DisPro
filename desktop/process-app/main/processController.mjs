@@ -3,7 +3,7 @@ import { createHash, generateKeyPairSync, sign as cryptoSign } from "node:crypto
 import { shell } from "electron";
 import { executeSignedProcessJob, supportedWorkloads } from "../worker/runners.mjs";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.1.1";
 const POLL_INTERVAL_MS = 3000;
 
 export class ProcessController {
@@ -17,6 +17,7 @@ export class ProcessController {
       failedJobs: 0,
       verificationJobs: 0,
       provisionalMicroYen: 0,
+      confirmedMicroYen: 0,
       update: null,
       message: "Not signed in"
     };
@@ -140,6 +141,7 @@ export class ProcessController {
       failedJobs: 0,
       verificationJobs: 0,
       provisionalMicroYen: 0,
+      confirmedMicroYen: 0,
       update: null,
       message: "Stored sign-in cleared"
     };
@@ -193,6 +195,13 @@ export class ProcessController {
     await this.ensureSignedIn();
     const query = setupSessionId ? `?setup_session_id=${encodeURIComponent(setupSessionId)}` : "";
     return apiFetch(this.auth.apiBaseUrl, `/billing/status${query}`, {
+      token: this.auth.sessionToken
+    });
+  }
+
+  async getAccountProfile() {
+    await this.ensureSignedIn();
+    return apiFetch(this.auth.apiBaseUrl, "/account/profile", {
       token: this.auth.sessionToken
     });
   }
@@ -413,6 +422,7 @@ export class ProcessController {
     this.status.failedJobs = earnings.failedCount;
     this.status.verificationJobs = earnings.verificationCount;
     this.status.provisionalMicroYen = earnings.provisionalMicroYen;
+    this.status.confirmedMicroYen = earnings.confirmedMicroYen ?? 0;
   }
 
   emit() {

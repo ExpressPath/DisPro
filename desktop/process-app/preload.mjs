@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("dispro", {
     status: (setupSessionId) => ipcRenderer.invoke("billing:status", setupSessionId),
     setup: () => ipcRenderer.invoke("billing:setup")
   },
+  account: {
+    profile: () => ipcRenderer.invoke("account:profile")
+  },
   use: {
     createOrder: (input) => ipcRenderer.invoke("use:create-order", input),
     getOrder: (orderId) => ipcRenderer.invoke("use:get-order", orderId),

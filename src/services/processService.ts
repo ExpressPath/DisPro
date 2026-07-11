@@ -339,15 +339,23 @@ export async function submitProcessResult(
 }
 
 export async function calculateProcessEarnings(store: DisproStore, userId: string): Promise<ProcessEarnings> {
-  const [jobs, results] = await Promise.all([store.listProcessJobs(), store.listProcessJobResultsForUser(userId)]);
+  const [jobs, results, transactions] = await Promise.all([
+    store.listProcessJobs(),
+    store.listProcessJobResultsForUser(userId),
+    store.listUserTransactions(userId)
+  ]);
   const userJobs = jobs.filter((job) => job.assignedUserId === userId);
   const completed = userJobs.filter((job) => job.status === "completed" && job.provisionalMicroYen > 0);
   const failed = results.filter((result) => result.status === "failed" || result.status === "rejected");
+  const confirmedMicroYen = transactions
+    .filter((transaction) => transaction.kind === "confirmed_earning" && transaction.status !== "failed")
+    .reduce((sum, transaction) => sum + transaction.amountMicroYen, 0);
 
   return {
     userId,
     provisionalMicroYen: completed.reduce((sum, job) => sum + job.provisionalMicroYen, 0),
-    confirmedMicroYen: 0,
+    confirmedMicroYen,
+    pendingPayoutMicroYen: confirmedMicroYen,
     processedCount: completed.length,
     failedCount: failed.length,
     verificationCount: completed.filter((job) => job.workload === "proof.verify").length
@@ -941,7 +949,10 @@ async function ensureTransactionAnchorJob(
         status: transaction.status,
         relatedJobId: transaction.relatedJobId,
         relatedOrderId: transaction.relatedOrderId,
-        stripePaymentIntentId: transaction.stripePaymentIntentId
+        stripePaymentIntentId: transaction.stripePaymentIntentId,
+        settlementId: transaction.settlementId,
+        contributionUnits: transaction.contributionUnits,
+        contributionShareBps: transaction.contributionShareBps
       })
     },
     now
@@ -1104,7 +1115,8 @@ function parseDistributedRecordType(value: unknown, fallback: DistributedRecord[
     value === "app.update" ||
     value === "order.contract" ||
     value === "order.result" ||
-    value === "billing.charge"
+    value === "billing.charge" ||
+    value === "revenue.distribution"
     ? value
     : fallback;
 }

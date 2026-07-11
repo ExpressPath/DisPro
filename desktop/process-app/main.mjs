@@ -86,6 +86,10 @@ ipcMain.handle("billing:setup", async () => {
   return controller.startBillingSetup();
 });
 
+ipcMain.handle("account:profile", async () => {
+  return controller.getAccountProfile();
+});
+
 ipcMain.handle("use:create-order", async (_event, input) => {
   return controller.createUseOrder(input);
 });

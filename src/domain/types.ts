@@ -294,7 +294,8 @@ export type DistributedRecordType =
   | "app.update"
   | "order.contract"
   | "order.result"
-  | "billing.charge";
+  | "billing.charge"
+  | "revenue.distribution";
 export type DistributedStorageProvider = "ipfs" | "filecoin" | "arweave" | "local";
 
 export interface ProcessNodeInfo {
@@ -468,6 +469,7 @@ export interface ProcessEarnings {
   userId: string;
   provisionalMicroYen: number;
   confirmedMicroYen: number;
+  pendingPayoutMicroYen: number;
   processedCount: number;
   failedCount: number;
   verificationCount: number;
@@ -516,7 +518,8 @@ export interface UserTransaction {
     | "smart_contract_payment"
     | "usage_charge"
     | "stripe_payment"
-    | "stripe_payment_failed";
+    | "stripe_payment_failed"
+    | "platform_fee";
   amountMicroYen: number;
   currency: "JPY_MICRO" | "USDC" | "ETH";
   status: "pending" | "anchored" | "failed" | "settled";
@@ -524,6 +527,9 @@ export interface UserTransaction {
   relatedOrderId?: string;
   stripePaymentIntentId?: string;
   distributedRecordId?: string;
+  settlementId?: string;
+  contributionUnits?: number;
+  contributionShareBps?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -557,6 +563,9 @@ export interface UseOrderRecord {
   maxChargeMicroYen: number;
   finalMicroYen?: number;
   billedMicroYen?: number;
+  platformFeeMicroYen?: number;
+  workerPoolMicroYen?: number;
+  distributionStatus?: "pending" | "settled";
   stripePaymentIntentId?: string;
   contractHash: string;
   cid: string;

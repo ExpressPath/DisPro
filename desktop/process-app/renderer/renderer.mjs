@@ -32,6 +32,7 @@ window.dispro.auth
       setEmailVerified(true);
       appendLog(`Signed in as ${result.user.email}`);
       refreshBillingStatus().catch((error) => appendLog(error.message));
+      refreshAccountProfile().catch((error) => appendLog(error.message));
     } else {
       setEmailVerified(false);
     }
@@ -75,6 +76,7 @@ verifyForm.addEventListener("submit", async (event) => {
     setEmailVerified(true);
     appendLog(`Verified ${result.user.email}. Process API key is ready.`);
     await refreshBillingStatus();
+    await refreshAccountProfile();
   } catch (error) {
     appendLog(error.message);
   }
@@ -222,6 +224,7 @@ function renderStatus(status) {
   document.querySelector("#processed-count").textContent = String(status.processedJobs);
   document.querySelector("#failed-count").textContent = String(status.failedJobs);
   document.querySelector("#earnings").textContent = `${(status.provisionalMicroYen / 1_000_000).toFixed(4)} JPY`;
+  document.querySelector("#confirmed-earnings").textContent = formatMicroYen(status.confirmedMicroYen ?? 0);
   appendLog(status.message);
 }
 
@@ -244,6 +247,23 @@ function renderUseOrder(order) {
   document.querySelector("#use-order-status").textContent = order.status;
   document.querySelector("#use-estimate").textContent = formatMicroYen(order.estimatedMicroYen);
   document.querySelector("#use-final").textContent = formatMicroYen(order.finalMicroYen ?? 0);
+  document.querySelector("#use-network-pool").textContent = formatMicroYen(order.workerPoolMicroYen ?? 0);
+  document.querySelector("#use-platform-fee").textContent = formatMicroYen(order.platformFeeMicroYen ?? 0);
+  refreshAccountProfile().catch((error) => appendLog(error.message));
+}
+
+async function refreshAccountProfile() {
+  if (!emailVerified) {
+    return;
+  }
+  const profile = await window.dispro.account.profile();
+  const spent = (profile.transactions ?? [])
+    .filter((transaction) => transaction.kind === "stripe_payment" && transaction.status !== "failed")
+    .reduce((sum, transaction) => sum + (transaction.amountMicroYen ?? 0), 0);
+  document.querySelector("#total-spent").textContent = formatMicroYen(spent);
+  if (profile.earnings) {
+    document.querySelector("#confirmed-earnings").textContent = formatMicroYen(profile.earnings.confirmedMicroYen ?? 0);
+  }
 }
 
 function formatMicroYen(value) {

@@ -64,7 +64,7 @@ test("keeps verification tasks away from their original compute node", () => {
   }
 });
 
-test("uses micro-yen pricing with a five percent platform fee", () => {
+test("uses micro-yen pricing with a ten percent platform fee", () => {
   const plan = planOrder(baseOrder, sampleNodes, {
     now: new Date("2026-07-04T00:00:00.000Z"),
     seed: "test-seed"
@@ -72,7 +72,7 @@ test("uses micro-yen pricing with a five percent platform fee", () => {
   const quote = quoteOrder(plan.order);
 
   assert.deepEqual(plan.quote, quote);
-  assert.equal(plan.quote.platformFeeMicroYen, Math.ceil(plan.quote.subtotalMicroYen * 0.05));
+  assert.equal(plan.quote.platformFeeMicroYen, Math.ceil(plan.quote.subtotalMicroYen * 0.1));
   assert.ok(plan.quote.totalMicroYen > plan.quote.subtotalMicroYen);
 });
 

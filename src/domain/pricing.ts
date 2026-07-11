@@ -1,7 +1,8 @@
 import type { Order, PriceQuote, Priority, VerificationLevel } from "./types.js";
 import { getWorkloadProfile } from "./workloads.js";
 
-const PLATFORM_FEE_RATE = 0.05;
+/** The API-side service fee applied to measured compute and verification cost. */
+export const PLATFORM_FEE_RATE = 0.1;
 
 const PRIORITY_MULTIPLIER: Record<Priority, number> = {
   economy: 0.8,

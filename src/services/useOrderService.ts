@@ -1,4 +1,5 @@
 import { hashObject, makeId, stableStringify } from "../domain/ids.js";
+import { PLATFORM_FEE_RATE } from "../domain/pricing.js";
 import type {
   DistributedRecord,
   JsonRecord,
@@ -25,8 +26,7 @@ import {
   getOrderProcessingState
 } from "./processService.js";
 import type { DisproStore } from "../storage/disproStore.js";
-
-const PLATFORM_FEE_RATE = 0.05;
+import { settleOrderRevenue } from "./revenueDistributionService.js";
 
 export type CreateUseOrderInput = OrderRequest & {
   maxChargeMicroYen?: number;
@@ -292,6 +292,19 @@ async function refreshUseOrder(
     status: charge.status,
     stripePaymentIntentId: charge.paymentIntentId
   }, now);
+  if (charge.status === "succeeded") {
+    const distribution = await settleOrderRevenue(store, charged, now);
+    return {
+      ...charged,
+      ...(distribution === undefined
+        ? {}
+        : {
+            platformFeeMicroYen: distribution.platformFeeMicroYen,
+            workerPoolMicroYen: distribution.workerPoolMicroYen,
+            distributionStatus: "settled" as const
+          })
+    };
+  }
   return charged;
 }
 

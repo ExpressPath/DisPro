@@ -1,8 +1,9 @@
 import Stripe from "stripe";
 import { makeId } from "../domain/ids.js";
-import type { BillingCustomer, UserAccount } from "../domain/types.js";
+import type { BillingCustomer, UserAccount, UseOrderRecord } from "../domain/types.js";
 import type { AuthContext } from "./authService.js";
 import type { DisproStore } from "../storage/disproStore.js";
+import { settleOrderRevenue } from "./revenueDistributionService.js";
 
 export interface BillingSetupInput {
   successUrl?: string;
@@ -347,14 +348,24 @@ async function handlePaymentIntentUpdated(
     return;
   }
 
-  await store.saveUseOrder({
-    ...order,
-    status: status === "succeeded" ? "paid" : "payment_failed",
-    billingStatus: status === "succeeded" ? "paid" : "failed",
-    ...(status === "succeeded" ? { billedMicroYen: order.finalMicroYen ?? order.estimatedMicroYen } : {}),
-    stripePaymentIntentId: paymentIntent.id,
-    updatedAt: now.toISOString()
-  });
+  const updatedOrder: UseOrderRecord =
+    status === "succeeded"
+      ? {
+          ...order,
+          status: "paid",
+          billingStatus: "paid",
+          billedMicroYen: order.finalMicroYen ?? order.estimatedMicroYen,
+          stripePaymentIntentId: paymentIntent.id,
+          updatedAt: now.toISOString()
+        }
+      : {
+          ...order,
+          status: "payment_failed",
+          billingStatus: "failed",
+          stripePaymentIntentId: paymentIntent.id,
+          updatedAt: now.toISOString()
+        };
+  await store.saveUseOrder(updatedOrder);
 
   const transactions = await store.listUserTransactions(order.userId);
   for (const transaction of transactions.filter((candidate) => candidate.stripePaymentIntentId === paymentIntent.id)) {
@@ -363,6 +374,9 @@ async function handlePaymentIntentUpdated(
       status: status === "succeeded" ? "settled" : "failed",
       updatedAt: now.toISOString()
     });
+  }
+  if (status === "succeeded") {
+    await settleOrderRevenue(store, updatedOrder, now);
   }
 }
 

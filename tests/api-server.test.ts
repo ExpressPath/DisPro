@@ -748,13 +748,48 @@ test("creates Use API keys, requires billing setup, finalizes metered results, a
     });
     assert.equal(finalizedResponse.status, 200);
     const finalized = (await finalizedResponse.json()) as {
-      order: { status: string; billingStatus: string; result?: unknown; finalMicroYen?: number; stripePaymentIntentId?: string };
+      order: {
+        status: string;
+        billingStatus: string;
+        result?: unknown;
+        finalMicroYen?: number;
+        stripePaymentIntentId?: string;
+        workerPoolMicroYen?: number;
+        platformFeeMicroYen?: number;
+        distributionStatus?: string;
+      };
     };
     assert.equal(finalized.order.status, "paid");
     assert.equal(finalized.order.billingStatus, "paid");
     assert.ok(finalized.order.result);
     assert.ok(finalized.order.finalMicroYen);
     assert.ok(finalized.order.stripePaymentIntentId?.startsWith("pi_mock_"));
+    assert.equal(finalized.order.distributionStatus, "settled");
+    assert.equal(
+      (finalized.order.workerPoolMicroYen ?? 0) + (finalized.order.platformFeeMicroYen ?? 0),
+      finalized.order.finalMicroYen
+    );
+    assert.equal(
+      finalized.order.workerPoolMicroYen,
+      Math.floor((finalized.order.finalMicroYen ?? 0) * 0.9)
+    );
+
+    const processorTransactions = await store.listUserTransactions("processor-user");
+    assert.equal(
+      processorTransactions.some(
+        (transaction) =>
+          transaction.kind === "confirmed_earning" && transaction.amountMicroYen === finalized.order.workerPoolMicroYen
+      ),
+      true
+    );
+    const treasuryTransactions = await store.listUserTransactions("dispro-treasury");
+    assert.equal(
+      treasuryTransactions.some(
+        (transaction) =>
+          transaction.kind === "platform_fee" && transaction.amountMicroYen === finalized.order.platformFeeMicroYen
+      ),
+      true
+    );
 
     const resultResponse = await fetch(`${baseUrl}/use/orders/use_order_001/result`, {
       headers: {
