@@ -7,10 +7,15 @@ export class DisproClient {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
-  async createOrder(order) {
+  async createQuote(order) {
+    return this.request("/use/quotes", { method: "POST", body: order });
+  }
+
+  async createOrder(order, { idempotencyKey = crypto.randomUUID() } = {}) {
     return this.request("/use/orders", {
       method: "POST",
-      body: order
+      body: order,
+      headers: { "idempotency-key": idempotencyKey }
     });
   }
 
@@ -42,7 +47,8 @@ export class DisproClient {
       method: options.method ?? "GET",
       headers: {
         authorization: `Bearer ${this.apiKey}`,
-        "content-type": "application/json"
+        "content-type": "application/json",
+        ...(options.headers ?? {})
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body)
     });

@@ -17,6 +17,7 @@ const billingSetupButton = document.querySelector("#billing-setup-button");
 const useOrderForm = document.querySelector("#use-order-form");
 const useRefreshOrderButton = document.querySelector("#use-refresh-order-button");
 const useResultButton = document.querySelector("#use-result-button");
+const payoutOnboardingButton = document.querySelector("#payout-onboarding-button");
 let currentUseOrderId;
 let emailVerified = false;
 
@@ -33,6 +34,7 @@ window.dispro.auth
       appendLog(`Signed in as ${result.user.email}`);
       refreshBillingStatus().catch((error) => appendLog(error.message));
       refreshAccountProfile().catch((error) => appendLog(error.message));
+      refreshWallet().catch((error) => appendLog(error.message));
     } else {
       setEmailVerified(false);
     }
@@ -77,6 +79,7 @@ verifyForm.addEventListener("submit", async (event) => {
     appendLog(`Verified ${result.user.email}. Process API key is ready.`);
     await refreshBillingStatus();
     await refreshAccountProfile();
+    await refreshWallet();
   } catch (error) {
     appendLog(error.message);
   }
@@ -95,6 +98,17 @@ stopButton.addEventListener("click", async () => {
   try {
     requireEmailVerified();
     await window.dispro.process.stop();
+  } catch (error) {
+    appendLog(error.message);
+  }
+});
+
+payoutOnboardingButton.addEventListener("click", async () => {
+  try {
+    requireEmailVerified();
+    const result = await window.dispro.wallet.onboarding();
+    appendLog(result.url ? "Stripe payout setup opened in your browser." : "Payout setup is ready.");
+    await refreshWallet();
   } catch (error) {
     appendLog(error.message);
   }
@@ -199,6 +213,7 @@ function setEmailVerified(value) {
     billingSetupButton,
     useRefreshOrderButton,
     useResultButton,
+    payoutOnboardingButton,
     ...useOrderForm.querySelectorAll("input, button")
   ]) {
     element.disabled = locked;
@@ -264,6 +279,13 @@ async function refreshAccountProfile() {
   if (profile.earnings) {
     document.querySelector("#confirmed-earnings").textContent = formatMicroYen(profile.earnings.confirmedMicroYen ?? 0);
   }
+}
+
+async function refreshWallet() {
+  if (!emailVerified) return;
+  const wallet = await window.dispro.wallet.summary();
+  document.querySelector("#available-earnings").textContent = formatMicroYen(wallet.availableMicroYen ?? 0);
+  payoutOnboardingButton.textContent = wallet.payout?.payoutsEnabled ? "Payout account ready" : "Set up payouts";
 }
 
 function formatMicroYen(value) {

@@ -38,12 +38,17 @@ import {
   createUseOrder,
   getUseOrder,
   getUseOrderResult,
-  listUseOrders
+  listUseOrders,
+  quoteUseOrder
 } from "../services/useOrderService.js";
+import { ConfidentialInputError } from "../services/confidentialInputService.js";
+import { makeId } from "../domain/ids.js";
 import { getDownloadManifest, getWindowsProcessDownload } from "../services/downloadService.js";
+import { WalletError, createConnectOnboarding, getWalletSummary, refreshConnectStatus, requestPayout } from "../services/walletService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
-const MAX_JSON_BODY_BYTES = 5 * 1024 * 1024;
+const MAX_JSON_BODY_BYTES = 1 * 1024 * 1024;
+const DEFAULT_ALLOWED_ORIGINS = ["https://dis-pro-liart.vercel.app"];
 
 export interface DisproHttpServerOptions {
   store: DisproStore;
@@ -76,6 +81,7 @@ export function createDisproHttpRequestHandler(
   const exposeDevSignInLinks =
     options.auth?.exposeDevSignInLinks ?? process.env.NODE_ENV !== "production";
 
+  const rateLimiter = new InMemoryRateLimiter();
   return (request, response) => {
     const context: RequestContext = {
       store: options.store,
@@ -91,13 +97,20 @@ export function createDisproHttpRequestHandler(
       context.authBaseUrl = options.auth.baseUrl;
     }
 
+    applySecurityHeaders(request, response);
+    if (!rateLimiter.consume(rateLimitKey(request), rateLimitFor(request))) {
+      writeJson(response, 429, { error: { status: 429, message: "Too many requests. Please retry later." } }, { "retry-after": "60" });
+      return;
+    }
     handleRequest(request, response, context).catch((error: unknown) => {
       const status =
         error instanceof ApiError ||
         error instanceof AuthError ||
         error instanceof ProcessError ||
         error instanceof BillingError ||
-        error instanceof UseOrderError
+        error instanceof UseOrderError ||
+        error instanceof ConfidentialInputError ||
+        error instanceof WalletError
           ? error.status
           : 500;
       const message = error instanceof Error ? error.message : "Unexpected server error.";
@@ -124,6 +137,10 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
   if (request.method === "OPTIONS") {
     writeJson(response, 204, null);
     return;
+  }
+
+  if (isCookieMutation(request) && !isAllowedOrigin(firstHeader(request.headers.origin))) {
+    throw new ApiError(403, "Cross-site cookie mutation is not allowed.");
   }
 
   const url = new URL(request.url ?? "/", "http://localhost");
@@ -337,9 +354,30 @@ async function route(
     };
   }
 
+  if (method === "POST" && parts.length === 2 && parts[0] === "use" && parts[1] === "quotes") {
+    const auth = await requireUseAuth(store, request, now);
+    const body = await readJson<OrderRequest>(request);
+    try {
+      return {
+        status: 200,
+        body: { quote: (await quoteUseOrder(store, auth, body, now(), body.id ?? body.source?.contentHash)).quote }
+      };
+    } catch (error) {
+      if (error instanceof ConfidentialInputError || error instanceof UseOrderError) throw error;
+      throw new ApiError(400, error instanceof Error ? error.message : "Invalid Use quote.");
+    }
+  }
+
   if (method === "POST" && parts.length === 2 && parts[0] === "use" && parts[1] === "orders") {
     const auth = await requireUseAuth(store, request, now);
+    const idempotencyKey = firstHeader(request.headers["idempotency-key"]);
+    if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 200) {
+      throw new ApiError(400, "A 16-200 character Idempotency-Key header is required.");
+    }
     const body = await readJson<OrderRequest & { maxChargeMicroYen?: number }>(request);
+    if (!body.id) {
+      body.id = makeId("use", { userId: auth.user.id, idempotencyKey }, 32);
+    }
     const seed = url.searchParams.get("seed") ?? body.id ?? body.source?.contentHash;
     try {
       return {
@@ -470,6 +508,28 @@ async function route(
         transactions: await store.listUserTransactions(auth.user.id)
       }
     };
+  }
+
+  if (method === "GET" && parts.length === 1 && parts[0] === "wallet") {
+    const auth = await requireAuth(store, request, now);
+    return { status: 200, body: await refreshConnectStatus(store, auth.user, now()) };
+  }
+
+  if (method === "GET" && parts.length === 1 && parts[0] === "payouts") {
+    const auth = await requireAuth(store, request, now);
+    const [wallet, transactions] = await Promise.all([getWalletSummary(store, auth.user.id), store.listUserTransactions(auth.user.id)]);
+    return { status: 200, body: { wallet, payouts: transactions.filter((transaction) => transaction.kind === "external_payment") } };
+  }
+
+  if (method === "POST" && parts.length === 3 && parts[0] === "payouts" && parts[1] === "connect" && parts[2] === "onboarding") {
+    const auth = await requireAuth(store, request, now);
+    return { status: 201, body: await createConnectOnboarding(store, auth.user, getRequestBaseUrl(request), now()) };
+  }
+
+  if (method === "POST" && parts.length === 2 && parts[0] === "payouts" && parts[1] === "request") {
+    const auth = await requireAuth(store, request, now);
+    const body = await readJson<{ amountMicroYen?: number }>(request);
+    return { status: 201, body: await requestPayout(store, auth.user, body.amountMicroYen ?? 0, now()) };
   }
 
   if (method === "GET" && parts.length === 2 && parts[0] === "account" && parts[1] === "distributed-records") {
@@ -666,11 +726,6 @@ function writeJson(
   redirectLocation?: string
 ): void {
   response.statusCode = status;
-  response.setHeader("access-control-allow-origin", "*");
-  response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type, authorization, stripe-signature");
-  response.setHeader("access-control-allow-credentials", "true");
-
   for (const [name, value] of Object.entries(headers)) {
     response.setHeader(name, value);
   }
@@ -688,6 +743,69 @@ function writeJson(
 
   response.setHeader("content-type", "application/json; charset=utf-8");
   response.end(`${JSON.stringify(body, null, 2)}\n`);
+}
+
+function applySecurityHeaders(request: IncomingMessage, response: ServerResponse): void {
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-frame-options", "DENY");
+  response.setHeader("referrer-policy", "no-referrer");
+  response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  response.setHeader("strict-transport-security", "max-age=63072000; includeSubDomains; preload");
+  response.setHeader("cache-control", "no-store");
+  const origin = firstHeader(request.headers.origin);
+  if (origin && isAllowedOrigin(origin)) {
+    response.setHeader("access-control-allow-origin", origin);
+    response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+    response.setHeader("access-control-allow-headers", "content-type, authorization, stripe-signature, idempotency-key");
+    response.setHeader("access-control-allow-credentials", "true");
+    response.setHeader("vary", "origin");
+  }
+}
+
+function allowedOrigins(): string[] {
+  const configured = process.env.DISPRO_ALLOWED_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean);
+  if (configured?.length) {
+    return configured;
+  }
+  return process.env.NODE_ENV === "production" ? DEFAULT_ALLOWED_ORIGINS : [...DEFAULT_ALLOWED_ORIGINS, "http://localhost:8787"];
+}
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  return Boolean(origin && allowedOrigins().includes(origin));
+}
+
+function isCookieMutation(request: IncomingMessage): boolean {
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(request.method ?? "GET") &&
+    Boolean(request.headers.cookie?.includes("dispro_session=")) &&
+    !request.headers.authorization;
+}
+
+function rateLimitKey(request: IncomingMessage): string {
+  const forwarded = firstHeader(request.headers["x-forwarded-for"]);
+  return `${forwarded?.split(",")[0]?.trim() ?? "unknown"}:${request.url?.split("?")[0] ?? "/"}`;
+}
+
+function rateLimitFor(request: IncomingMessage): { limit: number; windowMs: number } {
+  const path = request.url ?? "";
+  if (path.startsWith("/auth/request") || path.startsWith("/auth/verify")) return { limit: 8, windowMs: 10 * 60_000 };
+  if (path.startsWith("/billing")) return { limit: 30, windowMs: 60_000 };
+  return { limit: 120, windowMs: 60_000 };
+}
+
+class InMemoryRateLimiter {
+  private readonly buckets = new Map<string, { count: number; resetAt: number }>();
+
+  consume(key: string, policy: { limit: number; windowMs: number }): boolean {
+    const now = Date.now();
+    const bucket = this.buckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      this.buckets.set(key, { count: 1, resetAt: now + policy.windowMs });
+      return true;
+    }
+    if (bucket.count >= policy.limit) return false;
+    bucket.count += 1;
+    return true;
+  }
 }
 
 async function tryServeStatic(

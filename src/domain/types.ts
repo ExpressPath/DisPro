@@ -32,6 +32,10 @@ export interface OrderRequirements {
   deterministic?: boolean;
   allowMobileVerification?: boolean;
   region?: string;
+  /** Prepaid operation envelope for isolated code runners; never billed by wall-clock time. */
+  executionCredits?: number;
+  /** Only the server-side egress proxy may use these hosts. */
+  allowedEgressHosts?: string[];
   workloadProfile?: WorkloadProfileOverrides;
 }
 
@@ -87,6 +91,9 @@ export interface WorkloadProfile {
 export interface PriceQuote {
   currency: "JPY_MICRO";
   computeUnits: number;
+  dataUnits: number;
+  executionCredits: number;
+  inputBytes: number;
   baseMicroYen: number;
   computeMicroYen: number;
   verificationMicroYen: number;
@@ -278,6 +285,8 @@ export interface BillingCustomer {
   stripeCustomerId: string;
   defaultPaymentMethodId?: string;
   setupComplete: boolean;
+  stripeConnectAccountId?: string;
+  payoutsEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -570,6 +579,7 @@ export interface UseOrderRecord {
   contractHash: string;
   cid: string;
   metrics: ProcessResultMetrics;
+  inputPrivacy?: JsonRecord;
   result?: UseOrderResultRef;
   createdAt: string;
   updatedAt: string;

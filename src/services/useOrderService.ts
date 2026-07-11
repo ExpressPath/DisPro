@@ -27,6 +27,7 @@ import {
 } from "./processService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 import { settleOrderRevenue } from "./revenueDistributionService.js";
+import { assertConfidentialOrderInput, createConfidentialInputPolicy, ConfidentialInputError } from "./confidentialInputService.js";
 
 export type CreateUseOrderInput = OrderRequest & {
   maxChargeMicroYen?: number;
@@ -37,6 +38,21 @@ export interface UseOrderView {
   plan: PlannedOrder;
 }
 
+export async function quoteUseOrder(
+  store: DisproStore,
+  auth: AuthContext,
+  input: OrderRequest,
+  now = new Date(),
+  seed?: string
+): Promise<PlannedOrder> {
+  assertConfidentialOrderInput(input);
+  rejectClientPricingOverrides(input);
+  return planOrder({ ...input, customerId: auth.user.id }, await store.listNodes(), {
+    now,
+    seed: seed ?? input.id ?? input.source?.contentHash
+  });
+}
+
 export async function createUseOrder(
   store: DisproStore,
   auth: AuthContext,
@@ -44,16 +60,23 @@ export async function createUseOrder(
   now = new Date(),
   seed?: string
 ): Promise<UseOrderView> {
+  assertConfidentialOrderInput(input);
+  rejectClientPricingOverrides(input);
+  if (input.id) {
+    const existing = await store.getUseOrder(input.id);
+    if (existing) {
+      if (existing.userId !== auth.user.id) {
+        throw new UseOrderError(409, "Idempotency key conflicts with another account.");
+      }
+      return { order: existing, plan: await requirePlan(store, existing.plannedOrderId, auth.user.id) };
+    }
+  }
   const billing = await getBillingStatus(store, auth, undefined, now);
   if (!billing.setupComplete) {
     throw new UseOrderError(402, "Register a payment method before creating Use orders.");
   }
 
-  const nodes = await store.listNodes();
-  const plan = planOrder({ ...input, customerId: auth.user.id }, nodes, {
-    now,
-    seed: seed ?? input.id ?? input.source?.contentHash
-  });
+  const plan = await quoteUseOrder(store, auth, input, now, seed);
   const estimatedMicroYen = plan.quote.totalMicroYen;
   const maxChargeMicroYen = normalizeMaxCharge(input.maxChargeMicroYen, estimatedMicroYen);
   const contractHash = hashObject({
@@ -81,6 +104,7 @@ export async function createUseOrder(
       computeUnits: plan.quote.computeUnits,
       runnerWorkUnits: 0
     },
+    inputPrivacy: createConfidentialInputPolicy(input) as unknown as JsonRecord,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   };
@@ -103,6 +127,12 @@ export async function createUseOrder(
     order: useOrder,
     plan
   };
+}
+
+function rejectClientPricingOverrides(input: OrderRequest): void {
+  if (input.requirements?.workloadProfile) {
+    throw new UseOrderError(400, "Client workload pricing overrides are not allowed for Use orders.");
+  }
 }
 
 export async function getUseOrder(

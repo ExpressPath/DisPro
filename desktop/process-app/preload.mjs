@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld("dispro", {
   account: {
     profile: () => ipcRenderer.invoke("account:profile")
   },
+  wallet: {
+    summary: () => ipcRenderer.invoke("wallet:summary"),
+    onboarding: () => ipcRenderer.invoke("wallet:onboarding")
+  },
   use: {
     createOrder: (input) => ipcRenderer.invoke("use:create-order", input),
     getOrder: (orderId) => ipcRenderer.invoke("use:get-order", orderId),

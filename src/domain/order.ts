@@ -62,6 +62,18 @@ function validateOrderRequest(request: OrderRequest): void {
   }
 
   validateWorkloadProfile(request.requirements?.workloadProfile);
+  validateExecutionEnvelope(request.requirements);
+}
+
+function validateExecutionEnvelope(requirements: OrderRequest["requirements"]): void {
+  const credits = requirements?.executionCredits;
+  if (credits !== undefined && (!Number.isInteger(credits) || credits < 0 || credits > 100)) {
+    throw new Error("requirements.executionCredits must be an integer between 0 and 100.");
+  }
+  const hosts = requirements?.allowedEgressHosts;
+  if (hosts !== undefined && (!Array.isArray(hosts) || hosts.some((host) => !/^[a-z0-9.-]+$/i.test(host)))) {
+    throw new Error("requirements.allowedEgressHosts must contain valid host names.");
+  }
 }
 
 function validateWorkloadProfile(profile: WorkloadProfileOverrides | undefined): void {

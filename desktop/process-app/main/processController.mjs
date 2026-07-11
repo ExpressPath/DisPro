@@ -1,9 +1,9 @@
 import { cpus, hostname, platform, release, totalmem } from "node:os";
-import { createHash, generateKeyPairSync, sign as cryptoSign } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID, sign as cryptoSign } from "node:crypto";
 import { shell } from "electron";
 import { executeSignedProcessJob, supportedWorkloads } from "../worker/runners.mjs";
 
-const APP_VERSION = "0.1.1";
+const APP_VERSION = "0.1.2";
 const POLL_INTERVAL_MS = 3000;
 
 export class ProcessController {
@@ -206,6 +206,22 @@ export class ProcessController {
     });
   }
 
+  async getWallet() {
+    await this.ensureSignedIn();
+    return apiFetch(this.auth.apiBaseUrl, "/wallet", { token: this.auth.sessionToken });
+  }
+
+  async startPayoutOnboarding() {
+    await this.ensureSignedIn();
+    const response = await apiFetch(this.auth.apiBaseUrl, "/payouts/connect/onboarding", {
+      method: "POST",
+      token: this.auth.sessionToken,
+      body: {}
+    });
+    if (response.url) await shell.openExternal(response.url);
+    return response;
+  }
+
   async startBillingSetup() {
     await this.ensureSignedIn();
     const response = await apiFetch(this.auth.apiBaseUrl, "/billing/setup-session", {
@@ -224,7 +240,8 @@ export class ProcessController {
     return apiFetch(this.auth.apiBaseUrl, "/use/orders", {
       method: "POST",
       token: this.auth.useApiKey,
-      body: normalizeUseOrderInput(input)
+      body: normalizeUseOrderInput(input),
+      headers: { "idempotency-key": randomUUID() }
     });
   }
 
@@ -437,6 +454,7 @@ async function apiFetch(apiBaseUrl, path, options = {}) {
   if (options.token) {
     headers.authorization = `Bearer ${options.token}`;
   }
+  Object.assign(headers, options.headers ?? {});
 
   let response;
   try {

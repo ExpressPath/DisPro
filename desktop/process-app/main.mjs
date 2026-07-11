@@ -90,6 +90,9 @@ ipcMain.handle("account:profile", async () => {
   return controller.getAccountProfile();
 });
 
+ipcMain.handle("wallet:summary", async () => controller.getWallet());
+ipcMain.handle("wallet:onboarding", async () => controller.startPayoutOnboarding());
+
 ipcMain.handle("use:create-order", async (_event, input) => {
   return controller.createUseOrder(input);
 });

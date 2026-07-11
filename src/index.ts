@@ -33,6 +33,7 @@ export {
 } from "./services/processService.js";
 export { createUseOrder, getUseOrder, getUseOrderResult, listUseOrders } from "./services/useOrderService.js";
 export { settleOrderRevenue } from "./services/revenueDistributionService.js";
+export { getWalletSummary, createConnectOnboarding, requestPayout } from "./services/walletService.js";
 export { FileDisproStore } from "./storage/fileDisproStore.js";
 export { NeonDisproStore } from "./storage/neonDisproStore.js";
 export { summarizeOrder } from "./storage/disproStore.js";

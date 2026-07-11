@@ -24,6 +24,14 @@
       "dest": "/api/index.ts"
     },
     {
+      "src": "/wallet(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/payouts(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
       "src": "/downloads(.*)",
       "dest": "/api/index.ts"
     },

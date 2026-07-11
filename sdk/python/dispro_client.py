@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import uuid
 import urllib.error
 import urllib.request
 
@@ -12,8 +13,16 @@ class DisproClient:
             raise ValueError("DISPRO_USE_API_KEY is required.")
         self.base_url = base_url.rstrip("/")
 
-    def create_order(self, order):
-        return self._request("/use/orders", method="POST", body=order)
+    def create_quote(self, order):
+        return self._request("/use/quotes", method="POST", body=order)
+
+    def create_order(self, order, idempotency_key=None):
+        return self._request(
+            "/use/orders",
+            method="POST",
+            body=order,
+            headers={"Idempotency-Key": idempotency_key or str(uuid.uuid4())},
+        )
 
     def get_order(self, order_id):
         return self._request(f"/use/orders/{order_id}")
@@ -33,7 +42,7 @@ class DisproClient:
             time.sleep(interval_seconds)
         raise TimeoutError(f"Timed out waiting for Dispro order {order_id}.")
 
-    def _request(self, path, method="GET", body=None):
+    def _request(self, path, method="GET", body=None, headers=None):
         data = None if body is None else json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}{path}",
@@ -42,6 +51,7 @@ class DisproClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
+                **(headers or {}),
             },
         )
         try:

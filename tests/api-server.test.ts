@@ -656,7 +656,8 @@ test("creates Use API keys, requires billing setup, finalizes metered results, a
       method: "POST",
       headers: {
         authorization: `Bearer ${useApiKeyBody.secret}`,
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "idempotency-key": "rejected-use-order-0001"
       },
       body: JSON.stringify({
         source: {
@@ -693,7 +694,8 @@ test("creates Use API keys, requires billing setup, finalizes metered results, a
       method: "POST",
       headers: {
         authorization: `Bearer ${useApiKeyBody.secret}`,
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "idempotency-key": "use-order-00000001"
       },
       body: JSON.stringify({
         id: "use_order_001",
@@ -865,7 +867,8 @@ test("requires three successful compute replicas before Use billing finalizes", 
       method: "POST",
       headers: {
         authorization: `Bearer ${useApiKeyBody.secret}`,
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "idempotency-key": "triple-order-000001"
       },
       body: JSON.stringify({
         id: "use_order_triple_001",
@@ -924,6 +927,66 @@ test("requires three successful compute replicas before Use billing finalizes", 
     } else {
       process.env.STRIPE_PUBLISHABLE_KEY = previousPublishable;
     }
+    await close();
+  }
+});
+
+test("quotes Use work, enforces idempotency, and rejects plaintext secrets", async () => {
+  const previousMock = process.env.DISPRO_STRIPE_MOCK;
+  process.env.DISPRO_STRIPE_MOCK = "true";
+  const { baseUrl, close } = await createTestApi();
+
+  try {
+    const sessionToken = await signInAndGetSessionToken(baseUrl, "secure-use@example.com");
+    const keyResponse = await fetch(`${baseUrl}/auth/api-keys`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${sessionToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ label: "secure-use", purpose: "use" })
+    });
+    const { secret } = (await keyResponse.json()) as { secret: string };
+    await fetch(`${baseUrl}/billing/setup-session`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${sessionToken}`, "content-type": "application/json" },
+      body: "{}"
+    });
+    const order = {
+      source: { kind: "url", uri: "https://example.test/input.json", byteSize: 64 * 1024 * 1024, contentHash: "secure-content-hash-001" },
+      workload: "data.transform"
+    };
+    const quote = await fetch(`${baseUrl}/use/quotes`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify(order)
+    });
+    const quoteBody = (await quote.json()) as { quote?: { dataUnits: number }; error?: { message?: string } };
+    assert.equal(quote.status, 200, quoteBody.error?.message);
+    assert.equal(quoteBody.quote?.dataUnits, 1);
+
+    const withoutKey = await fetch(`${baseUrl}/use/orders`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify(order)
+    });
+    assert.equal(withoutKey.status, 400);
+
+    const headers = { authorization: `Bearer ${secret}`, "content-type": "application/json", "idempotency-key": "secure-order-key-0001" };
+    const first = await fetch(`${baseUrl}/use/orders`, { method: "POST", headers, body: JSON.stringify(order) });
+    const second = await fetch(`${baseUrl}/use/orders`, { method: "POST", headers, body: JSON.stringify(order) });
+    const firstBody = (await first.json()) as { order: { id: string } };
+    const secondBody = (await second.json()) as { order: { id: string } };
+    assert.equal(first.status, 201);
+    assert.equal(second.status, 201);
+    assert.equal(firstBody.order.id, secondBody.order.id);
+
+    const secretOrder = await fetch(`${baseUrl}/use/quotes`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ ...order, parameters: { privateKey: "never-send-this" } })
+    });
+    assert.equal(secretOrder.status, 400);
+  } finally {
+    if (previousMock === undefined) delete process.env.DISPRO_STRIPE_MOCK;
+    else process.env.DISPRO_STRIPE_MOCK = previousMock;
     await close();
   }
 });
