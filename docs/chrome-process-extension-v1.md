@@ -5,6 +5,7 @@
 ## Security boundary
 
 - The extension only connects to `https://dis-pro-liart.vercel.app` and ships no content scripts or remote JavaScript.
+- The API permits configured Chrome extension origins for bearer-token CORS only; cookie-authenticated mutations remain restricted to the official site origin.
 - Email verification is mandatory before Process, Use, billing, payout, or order actions.
 - Session token, Process API key, Use API key, and node signing key live in `chrome.storage.session`, so they are removed when the browser session ends. `chrome.storage.local` contains only a random non-secret machine identifier.
 - Every lease is verified with the API Ed25519 public key. Expired, unsigned, replayed by the API, or unsupported workloads are rejected.
@@ -33,3 +34,4 @@ Set these production values after publishing a Chrome release asset or Web Store
 - `DISPRO_CHROME_PROCESS_UPDATE_URL`
 - `DISPRO_CHROME_PROCESS_UPDATE_SHA256`
 - `DISPRO_CHROME_PROCESS_WEB_STORE_URL` (when available)
+- `DISPRO_CHROME_EXTENSION_IDS` after Chrome Web Store publication. Until then, set `DISPRO_ALLOW_CHROME_EXTENSION_ORIGINS=true` only for the signed Dispro extension rollout.

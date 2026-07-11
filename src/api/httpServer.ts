@@ -753,7 +753,7 @@ function applySecurityHeaders(request: IncomingMessage, response: ServerResponse
   response.setHeader("strict-transport-security", "max-age=63072000; includeSubDomains; preload");
   response.setHeader("cache-control", "no-store");
   const origin = firstHeader(request.headers.origin);
-  if (origin && isAllowedOrigin(origin)) {
+  if (origin && isAllowedCorsOrigin(origin)) {
     response.setHeader("access-control-allow-origin", origin);
     response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
     response.setHeader("access-control-allow-headers", "content-type, authorization, stripe-signature, idempotency-key");
@@ -772,6 +772,22 @@ function allowedOrigins(): string[] {
 
 function isAllowedOrigin(origin: string | undefined): boolean {
   return Boolean(origin && allowedOrigins().includes(origin));
+}
+
+function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  if (isAllowedOrigin(origin)) {
+    return true;
+  }
+  if (!origin?.startsWith("chrome-extension://")) {
+    return false;
+  }
+  if (process.env.DISPRO_ALLOW_CHROME_EXTENSION_ORIGINS === "true") {
+    return true;
+  }
+  const extensionIds = process.env.DISPRO_CHROME_EXTENSION_IDS?.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean) ?? [];
+  return extensionIds.some((id) => origin === `chrome-extension://${id}`);
 }
 
 function isCookieMutation(request: IncomingMessage): boolean {

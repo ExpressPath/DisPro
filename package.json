@@ -1,6 +1,6 @@
 {
   "name": "dispro",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Dispro distributed compute order and task planning foundation.",
   "type": "module",
   "private": true,

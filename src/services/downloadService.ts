@@ -53,7 +53,7 @@ export async function getWindowsProcessDownload(): Promise<DownloadManifestItem>
 }
 
 export async function getChromeProcessDownload(): Promise<DownloadManifestItem> {
-  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.3";
+  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.4";
   const fileName = process.env.DISPRO_CHROME_PROCESS_FILE_NAME ?? "Dispro-Process-Chrome.zip";
   const downloadUrl =
     process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_URL ??

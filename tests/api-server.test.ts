@@ -640,6 +640,24 @@ test("serves Windows and Chrome Process downloads and redirects to their release
   }
 });
 
+test("permits Chrome extension bearer API CORS without allowing it as a cookie-auth origin", async () => {
+  const previous = process.env.DISPRO_ALLOW_CHROME_EXTENSION_ORIGINS;
+  process.env.DISPRO_ALLOW_CHROME_EXTENSION_ORIGINS = "true";
+  const { baseUrl, close } = await createTestApi();
+
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: { origin: "chrome-extension://disprotestextensionid" }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("access-control-allow-origin"), "chrome-extension://disprotestextensionid");
+  } finally {
+    if (previous === undefined) delete process.env.DISPRO_ALLOW_CHROME_EXTENSION_ORIGINS;
+    else process.env.DISPRO_ALLOW_CHROME_EXTENSION_ORIGINS = previous;
+    await close();
+  }
+});
+
 test("creates Use API keys, requires billing setup, finalizes metered results, and records mock Stripe payment", async () => {
   const previousMock = process.env.DISPRO_STRIPE_MOCK;
   const previousPublishable = process.env.STRIPE_PUBLISHABLE_KEY;

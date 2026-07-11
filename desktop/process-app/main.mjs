@@ -29,6 +29,7 @@ function createWindow() {
 
   controller = new ProcessController({
     credentials,
+    appVersion: app.getVersion(),
     onStatus: (status) => mainWindow?.webContents.send("process:status", status)
   });
 

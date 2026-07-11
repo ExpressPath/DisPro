@@ -3,13 +3,13 @@ import { createHash, generateKeyPairSync, randomUUID, sign as cryptoSign } from 
 import { shell } from "electron";
 import { executeSignedProcessJob, supportedWorkloads } from "../worker/runners.mjs";
 
-const APP_VERSION = "0.1.2";
 const POLL_INTERVAL_MS = 3000;
 
 export class ProcessController {
-  constructor({ credentials, onStatus }) {
+  constructor({ credentials, onStatus, appVersion }) {
     this.credentials = credentials;
     this.onStatus = onStatus;
+    this.appVersion = appVersion ?? "0.1.4";
     this.status = {
       mode: "stopped",
       connected: false,
@@ -298,7 +298,7 @@ export class ProcessController {
         machineId: `${hostname()}-${platform()}-${release()}`,
         deviceName: hostname(),
         os: `${platform()} ${release()}`,
-        appVersion: APP_VERSION,
+        appVersion: this.appVersion,
         cpuCores: cpus().length,
         memoryGb: Math.round((totalmem() / 1024 ** 3) * 10) / 10,
         supportedWorkloads,
