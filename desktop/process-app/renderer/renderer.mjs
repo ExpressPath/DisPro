@@ -20,6 +20,7 @@ const useResultButton = document.querySelector("#use-result-button");
 const payoutOnboardingButton = document.querySelector("#payout-onboarding-button");
 let currentUseOrderId;
 let emailVerified = false;
+let lastLogMessage = "";
 
 setEmailVerified(false);
 
@@ -240,7 +241,9 @@ function renderStatus(status) {
   document.querySelector("#failed-count").textContent = String(status.failedJobs);
   document.querySelector("#earnings").textContent = `${(status.provisionalMicroYen / 1_000_000).toFixed(4)} JPY`;
   document.querySelector("#confirmed-earnings").textContent = formatMicroYen(status.confirmedMicroYen ?? 0);
-  appendLog(status.message);
+  if (!isQuietProcessMessage(status)) {
+    appendLog(status.message);
+  }
 }
 
 async function refreshBillingStatus() {
@@ -293,6 +296,14 @@ function formatMicroYen(value) {
 }
 
 function appendLog(message) {
+  if (!message || message === lastLogMessage) {
+    return;
+  }
+  lastLogMessage = message;
   const line = `[${new Date().toLocaleTimeString()}] ${message}`;
   log.textContent = `${line}\n${log.textContent}`.slice(0, 8000);
+}
+
+function isQuietProcessMessage(status) {
+  return status.mode === "waiting" || /^Waiting for signed/i.test(String(status.message ?? ""));
 }

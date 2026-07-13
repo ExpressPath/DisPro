@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 export interface DownloadManifestItem {
-  platform: "windows" | "chrome";
-  architecture: "x64" | "browser";
+  platform: "windows" | "chrome" | "android";
+  architecture: "x64" | "browser" | "universal-apk";
   app: "process";
   version: string;
   fileName: string;
@@ -21,9 +21,13 @@ const STABLE_WINDOWS_ASSET = "Dispro-Process-Windows-x64.exe";
 const FALLBACK_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000";
 
 export async function getDownloadManifest(): Promise<{ downloads: DownloadManifestItem[] }> {
-  const [windows, chrome] = await Promise.all([getWindowsProcessDownload(), getChromeProcessDownload()]);
+  const [windows, chrome, android] = await Promise.all([
+    getWindowsProcessDownload(),
+    getChromeProcessDownload(),
+    getAndroidProcessDownload()
+  ]);
   return {
-    downloads: [windows, chrome]
+    downloads: [windows, chrome, android]
   };
 }
 
@@ -53,7 +57,7 @@ export async function getWindowsProcessDownload(): Promise<DownloadManifestItem>
 }
 
 export async function getChromeProcessDownload(): Promise<DownloadManifestItem> {
-  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.4";
+  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.5";
   const fileName = process.env.DISPRO_CHROME_PROCESS_FILE_NAME ?? "Dispro-Process-Chrome.zip";
   const downloadUrl =
     process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_URL ??
@@ -72,6 +76,29 @@ export async function getChromeProcessDownload(): Promise<DownloadManifestItem> 
     recommendedDevice: "Chrome on laptop or desktop",
     minimumSpec: "Chrome 113+, 4 CPU cores, 6 GB RAM, stable network",
     updateProvider: process.env.DISPRO_CHROME_PROCESS_WEB_STORE_URL ? "chrome-web-store" : "github-releases"
+  };
+}
+
+export async function getAndroidProcessDownload(): Promise<DownloadManifestItem> {
+  const version = process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_VERSION ?? "0.1.5";
+  const fileName = process.env.DISPRO_ANDROID_PROCESS_FILE_NAME ?? "Dispro-Process-Android.apk";
+  const downloadUrl =
+    process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_URL ??
+    `https://github.com/ExpressPath/DisPro/releases/latest/download/${encodeURIComponent(fileName)}`;
+
+  return {
+    platform: "android",
+    architecture: "universal-apk",
+    app: "process",
+    version,
+    fileName,
+    sizeBytes: parseNumber(process.env.DISPRO_ANDROID_PROCESS_SIZE_BYTES, 0),
+    sha256: process.env.DISPRO_ANDROID_PROCESS_SHA256 ?? FALLBACK_SHA256,
+    downloadUrl,
+    role: "Earn - Process mobile verification node",
+    recommendedDevice: "Android phone or tablet on stable power/network",
+    minimumSpec: "Android 12+, 4 CPU cores, 4 GB RAM, stable network",
+    updateProvider: process.env.DISPRO_ANDROID_PROCESS_PLAY_STORE_URL ? "manual" : "github-releases"
   };
 }
 

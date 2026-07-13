@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 let emailVerified = false;
 let currentOrderId;
 let statusTimer;
+let lastLogMessage = "";
 
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -160,7 +161,7 @@ async function run(action) {
   try {
     requireVerified();
     const result = await action();
-    if (result?.message) log(result.message);
+    if (result?.message && !isQuietProcessMessage(result)) log(result.message);
     await refreshStatus();
     await refreshAccount();
   } catch (error) {
@@ -177,7 +178,13 @@ function money(value) {
 }
 
 function log(message) {
+  if (!message || message === lastLogMessage) return;
+  lastLogMessage = message;
   $("#log").textContent = `[${new Date().toLocaleTimeString()}] ${message}\n${$("#log").textContent}`.slice(0, 6000);
+}
+
+function isQuietProcessMessage(status) {
+  return status.mode === "waiting" || /^Waiting for signed/i.test(String(status.message ?? ""));
 }
 
 async function send(type, payload = {}) {

@@ -1,6 +1,6 @@
 {
   "name": "dispro",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Dispro distributed compute order and task planning foundation.",
   "type": "module",
   "private": true,
@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "build:site": "node scripts/build-site.mjs",
     "build:vercel": "npm run build && npm run build:site",
+    "android:build": "node scripts/build-android-package.mjs",
     "chrome:build": "node scripts/build-chrome-extension.mjs",
     "desktop:dev": "electron desktop/process-app/main.mjs",
     "desktop:pack": "electron-builder --win portable",
@@ -53,12 +54,12 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.1.1",
     "@types/nodemailer": "^8.0.1",
     "electron": "^43.1.0",
     "electron-builder": "^26.15.3",
-    "tsx": "^4.20.0",
-    "typescript": "^5.8.0"
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
   },
   "optionalDependencies": {
     "keytar": "^7.9.0"
@@ -67,6 +68,6 @@
     "@neondatabase/serverless": "^1.1.0",
     "electron-updater": "^6.6.2",
     "nodemailer": "^9.0.3",
-    "stripe": "^22.3.0"
+    "stripe": "^22.3.1"
   }
 }

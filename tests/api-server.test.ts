@@ -608,7 +608,7 @@ test("anchors user profile and process earning transactions through signed speci
   }
 });
 
-test("serves Windows and Chrome Process downloads and redirects to their release assets", async () => {
+test("serves Windows, Chrome, and Android Process downloads and redirects to their release assets", async () => {
   const { baseUrl, close } = await createTestApi();
 
   try {
@@ -619,10 +619,13 @@ test("serves Windows and Chrome Process downloads and redirects to their release
     };
     const windows = manifest.downloads.find((download) => download.platform === "windows");
     const chrome = manifest.downloads.find((download) => download.platform === "chrome");
+    const android = manifest.downloads.find((download) => download.platform === "android");
     assert.equal(windows?.app, "process");
     assert.match(windows?.sha256 ?? "", /^[a-f0-9]{64}$/);
     assert.equal(chrome?.app, "process");
     assert.match(chrome?.sha256 ?? "", /^[a-f0-9]{64}$/);
+    assert.equal(android?.app, "process");
+    assert.match(android?.sha256 ?? "", /^[a-f0-9]{64}$/);
 
     const redirectResponse = await fetch(`${baseUrl}/downloads/windows/process/latest`, {
       redirect: "manual"
@@ -635,6 +638,12 @@ test("serves Windows and Chrome Process downloads and redirects to their release
     });
     assert.equal(chromeRedirectResponse.status, 302);
     assert.match(chromeRedirectResponse.headers.get("location") ?? "", /Dispro-Process-Chrome\.zip/);
+
+    const androidRedirectResponse = await fetch(`${baseUrl}/downloads/android/process/latest`, {
+      redirect: "manual"
+    });
+    assert.equal(androidRedirectResponse.status, 302);
+    assert.match(androidRedirectResponse.headers.get("location") ?? "", /Dispro-Process-Android\.apk/);
   } finally {
     await close();
   }
@@ -986,7 +995,7 @@ test("quotes Use work, enforces idempotency, and rejects plaintext secrets", asy
       body: JSON.stringify(order)
     });
     const quoteBody = (await quote.json()) as { quote?: { dataUnits: number }; error?: { message?: string } };
-    assert.equal(quote.status, 200, quoteBody.error?.message);
+    assert.equal(quote.status, 200, quoteBody.error?.message ?? "quote should succeed");
     assert.equal(quoteBody.quote?.dataUnits, 1);
 
     const withoutKey = await fetch(`${baseUrl}/use/orders`, {

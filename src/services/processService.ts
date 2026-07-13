@@ -966,16 +966,10 @@ async function ensureAppUpdateJob(
   currentVersion: string,
   now: Date
 ): Promise<ProcessJob | undefined> {
-  const isChromeExtension = node.runnerFamily?.startsWith("chrome-extension-") ?? false;
-  const updateVersion = isChromeExtension
-    ? process.env.DISPRO_CHROME_PROCESS_UPDATE_VERSION
-    : process.env.DISPRO_PROCESS_UPDATE_VERSION;
-  const downloadUrl = isChromeExtension
-    ? process.env.DISPRO_CHROME_PROCESS_UPDATE_URL
-    : process.env.DISPRO_PROCESS_UPDATE_URL;
-  const sha256 = isChromeExtension
-    ? process.env.DISPRO_CHROME_PROCESS_UPDATE_SHA256
-    : process.env.DISPRO_PROCESS_UPDATE_SHA256;
+  const updateTarget = processUpdateTargetFor(node);
+  const updateVersion = updateTarget.version;
+  const downloadUrl = updateTarget.downloadUrl;
+  const sha256 = updateTarget.sha256;
   if (!updateVersion || !downloadUrl || !sha256 || updateVersion === currentVersion) {
     return undefined;
   }
@@ -993,23 +987,70 @@ async function ensureAppUpdateJob(
       provider: "local",
       manifest: {
         version: updateVersion,
-        platform: isChromeExtension ? "chrome" : "win32",
-        channel: isChromeExtension
-          ? process.env.DISPRO_CHROME_PROCESS_UPDATE_CHANNEL ?? "stable"
-          : process.env.DISPRO_PROCESS_UPDATE_CHANNEL ?? "stable",
+        platform: updateTarget.platform,
+        channel: updateTarget.channel,
         downloadUrl,
         sha256,
-        mandatory: isChromeExtension
-          ? process.env.DISPRO_CHROME_PROCESS_UPDATE_MANDATORY === "true"
-          : process.env.DISPRO_PROCESS_UPDATE_MANDATORY === "true",
-        notes: isChromeExtension
-          ? process.env.DISPRO_CHROME_PROCESS_UPDATE_NOTES ?? ""
-          : process.env.DISPRO_PROCESS_UPDATE_NOTES ?? "",
-        webStoreUrl: isChromeExtension ? process.env.DISPRO_CHROME_PROCESS_WEB_STORE_URL ?? "" : ""
+        mandatory: updateTarget.mandatory,
+        notes: updateTarget.notes,
+        webStoreUrl: updateTarget.webStoreUrl,
+        playStoreUrl: updateTarget.playStoreUrl
       }
     },
     now
   );
+}
+
+function processUpdateTargetFor(node: ProcessNodeRecord): {
+  platform: "win32" | "chrome" | "android";
+  version: string | undefined;
+  downloadUrl: string | undefined;
+  sha256: string | undefined;
+  channel: string;
+  mandatory: boolean;
+  notes: string;
+  webStoreUrl: string;
+  playStoreUrl: string;
+} {
+  if (node.runnerFamily?.startsWith("chrome-extension-")) {
+    return {
+      platform: "chrome",
+      version: process.env.DISPRO_CHROME_PROCESS_UPDATE_VERSION,
+      downloadUrl: process.env.DISPRO_CHROME_PROCESS_UPDATE_URL,
+      sha256: process.env.DISPRO_CHROME_PROCESS_UPDATE_SHA256,
+      channel: process.env.DISPRO_CHROME_PROCESS_UPDATE_CHANNEL ?? "stable",
+      mandatory: process.env.DISPRO_CHROME_PROCESS_UPDATE_MANDATORY === "true",
+      notes: process.env.DISPRO_CHROME_PROCESS_UPDATE_NOTES ?? "",
+      webStoreUrl: process.env.DISPRO_CHROME_PROCESS_WEB_STORE_URL ?? "",
+      playStoreUrl: ""
+    };
+  }
+
+  if (node.runnerFamily?.startsWith("android-process-")) {
+    return {
+      platform: "android",
+      version: process.env.DISPRO_ANDROID_PROCESS_UPDATE_VERSION,
+      downloadUrl: process.env.DISPRO_ANDROID_PROCESS_UPDATE_URL,
+      sha256: process.env.DISPRO_ANDROID_PROCESS_UPDATE_SHA256,
+      channel: process.env.DISPRO_ANDROID_PROCESS_UPDATE_CHANNEL ?? "stable",
+      mandatory: process.env.DISPRO_ANDROID_PROCESS_UPDATE_MANDATORY === "true",
+      notes: process.env.DISPRO_ANDROID_PROCESS_UPDATE_NOTES ?? "",
+      webStoreUrl: "",
+      playStoreUrl: process.env.DISPRO_ANDROID_PROCESS_PLAY_STORE_URL ?? ""
+    };
+  }
+
+  return {
+    platform: "win32",
+    version: process.env.DISPRO_PROCESS_UPDATE_VERSION,
+    downloadUrl: process.env.DISPRO_PROCESS_UPDATE_URL,
+    sha256: process.env.DISPRO_PROCESS_UPDATE_SHA256,
+    channel: process.env.DISPRO_PROCESS_UPDATE_CHANNEL ?? "stable",
+    mandatory: process.env.DISPRO_PROCESS_UPDATE_MANDATORY === "true",
+    notes: process.env.DISPRO_PROCESS_UPDATE_NOTES ?? "",
+    webStoreUrl: "",
+    playStoreUrl: ""
+  };
 }
 
 async function ensureSpecialJob(
