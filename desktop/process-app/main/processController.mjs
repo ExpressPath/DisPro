@@ -9,7 +9,7 @@ export class ProcessController {
   constructor({ credentials, onStatus, appVersion }) {
     this.credentials = credentials;
     this.onStatus = onStatus;
-    this.appVersion = appVersion ?? "0.1.6";
+    this.appVersion = appVersion ?? "0.1.7";
     this.status = {
       mode: "stopped",
       connected: false,

@@ -608,7 +608,7 @@ test("anchors user profile and process earning transactions through signed speci
   }
 });
 
-test("serves Windows, Chrome, and Android Process downloads and redirects to their release assets", async () => {
+test("serves Windows, Linux, Chrome, and Android Process downloads and redirects to their release assets", async () => {
   const { baseUrl, close } = await createTestApi();
 
   try {
@@ -618,10 +618,13 @@ test("serves Windows, Chrome, and Android Process downloads and redirects to the
       downloads: Array<{ platform: string; app: string; sha256: string; downloadUrl: string }>;
     };
     const windows = manifest.downloads.find((download) => download.platform === "windows");
+    const linux = manifest.downloads.find((download) => download.platform === "linux");
     const chrome = manifest.downloads.find((download) => download.platform === "chrome");
     const android = manifest.downloads.find((download) => download.platform === "android");
     assert.equal(windows?.app, "process");
     assert.match(windows?.sha256 ?? "", /^[a-f0-9]{64}$/);
+    assert.equal(linux?.app, "process");
+    assert.match(linux?.sha256 ?? "", /^[a-f0-9]{64}$/);
     assert.equal(chrome?.app, "process");
     assert.match(chrome?.sha256 ?? "", /^[a-f0-9]{64}$/);
     assert.equal(android?.app, "process");
@@ -632,6 +635,12 @@ test("serves Windows, Chrome, and Android Process downloads and redirects to the
     });
     assert.equal(redirectResponse.status, 302);
     assert.match(redirectResponse.headers.get("location") ?? "", /github\.com\/ExpressPath\/DisPro\/releases/);
+
+    const linuxRedirectResponse = await fetch(`${baseUrl}/downloads/linux/process/latest`, {
+      redirect: "manual"
+    });
+    assert.equal(linuxRedirectResponse.status, 302);
+    assert.match(linuxRedirectResponse.headers.get("location") ?? "", /Dispro-Process-Linux-x64\.AppImage/);
 
     const chromeRedirectResponse = await fetch(`${baseUrl}/downloads/chrome/process/latest`, {
       redirect: "manual"
@@ -644,6 +653,42 @@ test("serves Windows, Chrome, and Android Process downloads and redirects to the
     });
     assert.equal(androidRedirectResponse.status, 302);
     assert.match(androidRedirectResponse.headers.get("location") ?? "", /Dispro-Process-Android\.apk/);
+  } finally {
+    await close();
+  }
+});
+
+test("serves git-style signed Process update graph with cache validators", async () => {
+  const { baseUrl, close } = await createTestApi();
+
+  try {
+    const graphResponse = await fetch(`${baseUrl}/updates/process`);
+    assert.equal(graphResponse.status, 200);
+    const etag = graphResponse.headers.get("etag");
+    assert.match(etag ?? "", /^"[a-f0-9]{64}"$/);
+    const graph = (await graphResponse.json()) as {
+      kind: string;
+      refs: Record<string, string>;
+      commits: Record<string, { id: string; tree: string; signature: string; assets: Array<{ platform: string }> }>;
+      publicKey: string;
+    };
+    assert.equal(graph.kind, "dispro.process.update-graph");
+    const linuxCommitId = graph.refs["refs/process/linux/stable"];
+    assert.match(linuxCommitId ?? "", /^[a-f0-9]{64}$/);
+    assert.equal(graph.commits[linuxCommitId ?? ""]?.assets[0]?.platform, "linux");
+    assert.match(graph.commits[linuxCommitId ?? ""]?.signature ?? "", /^[A-Za-z0-9_-]+$/);
+    assert.match(graph.publicKey, /BEGIN PUBLIC KEY/);
+
+    const cachedResponse = await fetch(`${baseUrl}/updates/process`, {
+      headers: { "if-none-match": etag ?? "" }
+    });
+    assert.equal(cachedResponse.status, 304);
+
+    const linuxRefResponse = await fetch(`${baseUrl}/updates/process/linux/stable`);
+    assert.equal(linuxRefResponse.status, 200);
+    const linuxRef = (await linuxRefResponse.json()) as { ref: string; commit: { id: string; assets: Array<{ platform: string }> } };
+    assert.equal(linuxRef.ref, "refs/process/linux/stable");
+    assert.equal(linuxRef.commit.assets[0]?.platform, "linux");
   } finally {
     await close();
   }

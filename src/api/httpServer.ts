@@ -47,8 +47,10 @@ import {
   getAndroidProcessDownload,
   getChromeProcessDownload,
   getDownloadManifest,
+  getLinuxProcessDownload,
   getWindowsProcessDownload
 } from "../services/downloadService.js";
+import { getProcessUpdateGraph, getProcessUpdateRef } from "../services/updateGraphService.js";
 import { WalletError, createConnectOnboarding, getWalletSummary, refreshConnectStatus, requestPayout } from "../services/walletService.js";
 import type { DisproStore } from "../storage/disproStore.js";
 
@@ -199,11 +201,48 @@ async function route(
     };
   }
 
+  if (method === "GET" && parts.length === 2 && parts[0] === "updates" && parts[1] === "process") {
+    const graph = await getProcessUpdateGraph(now());
+    if (firstHeader(request.headers["if-none-match"]) === graph.etag) {
+      return { status: 304, body: null, headers: { etag: graph.etag } };
+    }
+    return {
+      status: 200,
+      body: graph,
+      headers: {
+        etag: graph.etag,
+        "cache-control": "public, max-age=30, stale-while-revalidate=300"
+      }
+    };
+  }
+
+  if (
+    method === "GET" &&
+    parts.length === 4 &&
+    parts[0] === "updates" &&
+    parts[1] === "process" &&
+    (parts[2] === "windows" || parts[2] === "linux" || parts[2] === "chrome" || parts[2] === "android") &&
+    parts[3] === "stable"
+  ) {
+    const update = await getProcessUpdateRef(parts[2], now());
+    if (firstHeader(request.headers["if-none-match"]) === update.etag) {
+      return { status: 304, body: null, headers: { etag: update.etag } };
+    }
+    return {
+      status: 200,
+      body: update,
+      headers: {
+        etag: update.etag,
+        "cache-control": "public, max-age=30, stale-while-revalidate=300"
+      }
+    };
+  }
+
   if (
     method === "GET" &&
     parts.length === 4 &&
     parts[0] === "downloads" &&
-    (parts[1] === "windows" || parts[1] === "chrome" || parts[1] === "android") &&
+    (parts[1] === "windows" || parts[1] === "linux" || parts[1] === "chrome" || parts[1] === "android") &&
     parts[2] === "process" &&
     parts[3] === "latest"
   ) {
@@ -212,7 +251,9 @@ async function route(
         ? await getChromeProcessDownload()
         : parts[1] === "android"
           ? await getAndroidProcessDownload()
-          : await getWindowsProcessDownload();
+          : parts[1] === "linux"
+            ? await getLinuxProcessDownload()
+            : await getWindowsProcessDownload();
     return {
       status: 302,
       body: null,
@@ -746,7 +787,7 @@ function writeJson(
     return;
   }
 
-  if (status === 204) {
+  if (status === 204 || status === 304) {
     response.end();
     return;
   }

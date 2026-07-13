@@ -25,6 +25,7 @@ import type {
 } from "../domain/types.js";
 import type { AuthContext } from "./authService.js";
 import type { DisproStore } from "../storage/disproStore.js";
+import { getProcessUpdateRef } from "./updateGraphService.js";
 
 const LEASE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PROVISIONAL_MICRO_YEN = 10_000;
@@ -974,6 +975,7 @@ async function ensureAppUpdateJob(
     return undefined;
   }
 
+  const updateRef = await getProcessUpdateRef(updateTarget.refPlatform, now).catch(() => undefined);
   const sourceId = `app-update-${node.id}-${updateVersion}`;
   return ensureSpecialJob(
     store,
@@ -994,7 +996,12 @@ async function ensureAppUpdateJob(
         mandatory: updateTarget.mandatory,
         notes: updateTarget.notes,
         webStoreUrl: updateTarget.webStoreUrl,
-        playStoreUrl: updateTarget.playStoreUrl
+        playStoreUrl: updateTarget.playStoreUrl,
+        updateRef: updateRef?.ref ?? `refs/process/${updateTarget.refPlatform}/stable`,
+        updateCommit: updateRef?.commit.id ?? "",
+        updateTree: updateRef?.commit.tree ?? "",
+        updateSignature: updateRef?.commit.signature ?? "",
+        updatePublicKey: updateRef?.publicKey ?? ""
       }
     },
     now
@@ -1002,7 +1009,8 @@ async function ensureAppUpdateJob(
 }
 
 function processUpdateTargetFor(node: ProcessNodeRecord): {
-  platform: "win32" | "chrome" | "android";
+  platform: "win32" | "linux" | "chrome" | "android";
+  refPlatform: "windows" | "linux" | "chrome" | "android";
   version: string | undefined;
   downloadUrl: string | undefined;
   sha256: string | undefined;
@@ -1015,6 +1023,7 @@ function processUpdateTargetFor(node: ProcessNodeRecord): {
   if (node.runnerFamily?.startsWith("chrome-extension-")) {
     return {
       platform: "chrome",
+      refPlatform: "chrome",
       version: process.env.DISPRO_CHROME_PROCESS_UPDATE_VERSION,
       downloadUrl: process.env.DISPRO_CHROME_PROCESS_UPDATE_URL,
       sha256: process.env.DISPRO_CHROME_PROCESS_UPDATE_SHA256,
@@ -1029,6 +1038,7 @@ function processUpdateTargetFor(node: ProcessNodeRecord): {
   if (node.runnerFamily?.startsWith("android-process-")) {
     return {
       platform: "android",
+      refPlatform: "android",
       version: process.env.DISPRO_ANDROID_PROCESS_UPDATE_VERSION,
       downloadUrl: process.env.DISPRO_ANDROID_PROCESS_UPDATE_URL,
       sha256: process.env.DISPRO_ANDROID_PROCESS_UPDATE_SHA256,
@@ -1041,13 +1051,26 @@ function processUpdateTargetFor(node: ProcessNodeRecord): {
   }
 
   return {
-    platform: "win32",
-    version: process.env.DISPRO_PROCESS_UPDATE_VERSION,
-    downloadUrl: process.env.DISPRO_PROCESS_UPDATE_URL,
-    sha256: process.env.DISPRO_PROCESS_UPDATE_SHA256,
-    channel: process.env.DISPRO_PROCESS_UPDATE_CHANNEL ?? "stable",
-    mandatory: process.env.DISPRO_PROCESS_UPDATE_MANDATORY === "true",
-    notes: process.env.DISPRO_PROCESS_UPDATE_NOTES ?? "",
+    platform: node.os.toLowerCase().includes("linux") ? "linux" : "win32",
+    refPlatform: node.os.toLowerCase().includes("linux") ? "linux" : "windows",
+    version: node.os.toLowerCase().includes("linux")
+      ? process.env.DISPRO_LINUX_PROCESS_UPDATE_VERSION
+      : process.env.DISPRO_PROCESS_UPDATE_VERSION,
+    downloadUrl: node.os.toLowerCase().includes("linux")
+      ? process.env.DISPRO_LINUX_PROCESS_UPDATE_URL
+      : process.env.DISPRO_PROCESS_UPDATE_URL,
+    sha256: node.os.toLowerCase().includes("linux")
+      ? process.env.DISPRO_LINUX_PROCESS_UPDATE_SHA256
+      : process.env.DISPRO_PROCESS_UPDATE_SHA256,
+    channel: node.os.toLowerCase().includes("linux")
+      ? process.env.DISPRO_LINUX_PROCESS_UPDATE_CHANNEL ?? "stable"
+      : process.env.DISPRO_PROCESS_UPDATE_CHANNEL ?? "stable",
+    mandatory: node.os.toLowerCase().includes("linux")
+      ? process.env.DISPRO_LINUX_PROCESS_UPDATE_MANDATORY === "true"
+      : process.env.DISPRO_PROCESS_UPDATE_MANDATORY === "true",
+    notes: node.os.toLowerCase().includes("linux")
+      ? process.env.DISPRO_LINUX_PROCESS_UPDATE_NOTES ?? ""
+      : process.env.DISPRO_PROCESS_UPDATE_NOTES ?? "",
     webStoreUrl: "",
     playStoreUrl: ""
   };

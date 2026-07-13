@@ -1,6 +1,6 @@
 {
   "name": "dispro",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Dispro distributed compute order and task planning foundation.",
   "type": "module",
   "private": true,
@@ -14,6 +14,7 @@
     "desktop:pack": "electron-builder --win portable",
     "desktop:pack:dir": "electron-builder --win dir",
     "desktop:pack:installer": "electron-builder --win nsis",
+    "desktop:pack:linux": "electron-builder --linux AppImage",
     "test": "node --import tsx --test tests/order-orchestrator.test.ts tests/api-server.test.ts tests/process-runner.test.mjs",
     "server": "tsx src/server.ts",
     "simulate": "tsx src/cli/simulate-order.ts"
@@ -36,6 +37,13 @@
       "target": [
         "portable"
       ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility",
+      "artifactName": "Dispro-Process-Linux-x64.AppImage"
     },
     "publish": [
       {

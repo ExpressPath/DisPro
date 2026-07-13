@@ -195,3 +195,52 @@ jobs:
             release/Dispro-Process-Android.apk
             release/Dispro-Process-Android.sha256
             release/android-process-manifest.json
+
+  release-linux:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Package Linux Process app
+        run: npm run desktop:pack:linux -- --publish never
+
+      - name: Prepare Linux release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          version=$(node -p "require('./package.json').version")
+          stable="release/Dispro-Process-Linux-x64.AppImage"
+          sha256=$(sha256sum "$stable" | awk '{print $1}')
+          size=$(stat -c%s "$stable")
+          printf '%s  Dispro-Process-Linux-x64.AppImage\n' "$sha256" > release/Dispro-Process-Linux-x64.sha256
+          node -e "const fs=require('fs');fs.writeFileSync('release/linux-process-manifest.json', JSON.stringify({version:'$version',platform:'linux',architecture:'x64',fileName:'Dispro-Process-Linux-x64.AppImage',sizeBytes:Number('$size'),sha256:'$sha256',provider:'github-releases'}, null, 2)+'\n')"
+
+      - name: Publish Linux GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/Dispro-Process-Linux-x64.AppImage
+            release/Dispro-Process-Linux-x64.sha256
+            release/linux-process-manifest.json

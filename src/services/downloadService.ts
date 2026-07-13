@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 
 export interface DownloadManifestItem {
-  platform: "windows" | "chrome" | "android";
+  platform: "windows" | "linux" | "chrome" | "android";
   architecture: "x64" | "browser" | "universal-apk";
   app: "process";
   version: string;
@@ -21,13 +21,14 @@ const STABLE_WINDOWS_ASSET = "Dispro-Process-Windows-x64.exe";
 const FALLBACK_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000";
 
 export async function getDownloadManifest(): Promise<{ downloads: DownloadManifestItem[] }> {
-  const [windows, chrome, android] = await Promise.all([
+  const [windows, linux, chrome, android] = await Promise.all([
     getWindowsProcessDownload(),
+    getLinuxProcessDownload(),
     getChromeProcessDownload(),
     getAndroidProcessDownload()
   ]);
   return {
-    downloads: [windows, chrome, android]
+    downloads: [windows, linux, chrome, android]
   };
 }
 
@@ -56,8 +57,33 @@ export async function getWindowsProcessDownload(): Promise<DownloadManifestItem>
   };
 }
 
+export async function getLinuxProcessDownload(): Promise<DownloadManifestItem> {
+  const version = process.env.DISPRO_LINUX_PROCESS_DOWNLOAD_VERSION ?? process.env.DISPRO_LINUX_PROCESS_UPDATE_VERSION ?? "0.1.7";
+  const fileName = process.env.DISPRO_LINUX_PROCESS_FILE_NAME ?? "Dispro-Process-Linux-x64.AppImage";
+  const localPath = join(process.cwd(), "release", fileName);
+  const localMetadata = await getLocalFileMetadata(localPath);
+  const downloadUrl =
+    process.env.DISPRO_LINUX_PROCESS_DOWNLOAD_URL ??
+    `https://github.com/ExpressPath/DisPro/releases/latest/download/${encodeURIComponent(fileName)}`;
+
+  return {
+    platform: "linux",
+    architecture: "x64",
+    app: "process",
+    version,
+    fileName,
+    sizeBytes: parseNumber(process.env.DISPRO_LINUX_PROCESS_SIZE_BYTES, localMetadata.sizeBytes),
+    sha256: process.env.DISPRO_LINUX_PROCESS_SHA256 ?? localMetadata.sha256 ?? FALLBACK_SHA256,
+    downloadUrl,
+    role: "Earn - Process node",
+    recommendedDevice: "Linux laptop, desktop, GPU PC, or server",
+    minimumSpec: "Linux x64, glibc-based desktop/server, 4 CPU cores, 6 GB RAM, stable network",
+    updateProvider: downloadUrl.includes("github.com") ? "github-releases" : "manual"
+  };
+}
+
 export async function getChromeProcessDownload(): Promise<DownloadManifestItem> {
-  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.6";
+  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.7";
   const fileName = process.env.DISPRO_CHROME_PROCESS_FILE_NAME ?? "Dispro-Process-Chrome.zip";
   const downloadUrl =
     process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_URL ??
@@ -80,7 +106,7 @@ export async function getChromeProcessDownload(): Promise<DownloadManifestItem> 
 }
 
 export async function getAndroidProcessDownload(): Promise<DownloadManifestItem> {
-  const version = process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_VERSION ?? "0.1.6";
+  const version = process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_VERSION ?? "0.1.7";
   const fileName = process.env.DISPRO_ANDROID_PROCESS_FILE_NAME ?? "Dispro-Process-Android.apk";
   const downloadUrl =
     process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_URL ??

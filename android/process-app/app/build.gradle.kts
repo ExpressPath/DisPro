@@ -10,8 +10,8 @@ android {
         applicationId = "app.dispro.process"
         minSdk = 31
         targetSdk = 35
-        versionCode = 106
-        versionName = "0.1.6"
+        versionCode = 107
+        versionName = "0.1.7"
     }
 
     buildFeatures {
