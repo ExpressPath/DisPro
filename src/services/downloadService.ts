@@ -57,7 +57,7 @@ export async function getWindowsProcessDownload(): Promise<DownloadManifestItem>
 }
 
 export async function getChromeProcessDownload(): Promise<DownloadManifestItem> {
-  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.5";
+  const version = process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_VERSION ?? "0.1.6";
   const fileName = process.env.DISPRO_CHROME_PROCESS_FILE_NAME ?? "Dispro-Process-Chrome.zip";
   const downloadUrl =
     process.env.DISPRO_CHROME_PROCESS_DOWNLOAD_URL ??
@@ -80,7 +80,7 @@ export async function getChromeProcessDownload(): Promise<DownloadManifestItem> 
 }
 
 export async function getAndroidProcessDownload(): Promise<DownloadManifestItem> {
-  const version = process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_VERSION ?? "0.1.5";
+  const version = process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_VERSION ?? "0.1.6";
   const fileName = process.env.DISPRO_ANDROID_PROCESS_FILE_NAME ?? "Dispro-Process-Android.apk";
   const downloadUrl =
     process.env.DISPRO_ANDROID_PROCESS_DOWNLOAD_URL ??
