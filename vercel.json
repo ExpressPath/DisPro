@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "api/index.ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "excludeFiles": "{release,release-verify,dist,android/process-app/app/build}/**"
+      }
     },
     {
       "src": "public/**",
@@ -33,6 +36,10 @@
     },
     {
       "src": "/downloads(.*)",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/updates(.*)",
       "dest": "/api/index.ts"
     },
     {

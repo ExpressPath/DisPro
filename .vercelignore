@@ -1,8 +1,5 @@
-node_modules
-release
-dist
-.dispro
-.env.local
-.agents
-skills-lock.json
-npm-debug.log*
+release/
+release-verify/
+dist/
+android/process-app/app/build/
+*.log
